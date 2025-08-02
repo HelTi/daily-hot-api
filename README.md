@@ -17,6 +17,8 @@
 ## 本地运行
 
 ```bash
+# clone项目
+git clone https://github.com/HelTi/daily-hot-api.git
 # 安装依赖
 $ npm install
 
@@ -43,7 +45,7 @@ $ npm run start:prod
 ### 获取热榜列表
 
 ```
-GET /api/hot-lists/{sourceName}
+GET /hot-lists/{sourceName}
 ```
 
 支持的数据源：
@@ -55,7 +57,7 @@ GET /api/hot-lists/{sourceName}
 ### 查看所有接口
 
 ```
-GET /hot-lists/al
+GET /hot-lists/all
 ```
 
 ## 开发指南
@@ -71,13 +73,13 @@ GET /hot-lists/al
 ```typescript
 @Injectable()
 @HotSource({
-  name: 'example',
+  name: 'sourceName',
   title: '示例热榜',
   type: '热榜',
   link: 'https://example.com',
 })
 export class ExampleSource implements HotListSource {
-  async getList(noCache?: boolean): Promise<HotListItem[]> {
+  async getList( options: GetListOptions = {},noCache?: boolean,): Promise<HotListGetListResponse[]> {
     // 实现获取数据的逻辑
   }
 }
@@ -98,7 +100,7 @@ sh deploy-pm2.sh
 $ docker build -t daily-hot-api .
 
 # 运行容器
-$ docker run -p 3000:3000 daily-hot-api
+$ docker run -p 6688:6688 daily-hot-api
 ```
 或者使用 make 命令：
 
