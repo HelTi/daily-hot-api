@@ -1,0 +1,7 @@
+node_modules/
+dist/
+coverage/
+healthcheck.js
+*.config.js
+*.config.mjs
+ecosystem.config.js 

@@ -1,0 +1,46 @@
+# 依赖目录
+node_modules
+npm-debug.log*
+
+# 构建输出
+build
+
+# 开发工具
+.vscode
+.idea
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# Git
+.git
+.gitignore
+
+# 环境变量
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# 日志
+logs
+*.log
+
+# 运行时文件
+*.pid
+*.seed
+*.pid.lock
+
+# 测试覆盖率
+coverage
+
+# Docker文件
+Dockerfile
+.dockerignore
+docker-compose.yml
+
+# 临时文件
+tmp
+temp 

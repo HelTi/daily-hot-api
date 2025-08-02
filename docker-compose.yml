@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    image: daily-hot-api:latest
+    container_name: daily-hot-api
+    ports:
+      - "6689:6689"
+    environment:
+      - NODE_ENV=production
+      - PORT=6689
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_URI=redis://redis:6379
+    depends_on:
+      - redis
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: daily-hot-redis
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data:/data
+      - ./redis.conf:/usr/local/etc/redis/redis.conf
+    command: redis-server /usr/local/etc/redis/redis.conf
+    restart: unless-stopped
+    networks:
+      - app-network
+
+volumes:
+  redis_data:
+
+networks:
+  app-network:
+    driver: bridge
+  
