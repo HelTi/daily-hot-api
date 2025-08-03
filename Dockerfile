@@ -35,6 +35,7 @@
   COPY --from=builder /app/dist ./dist
   # 如果 healthcheck.js 源自代码，确保它也被复制
   COPY --from=builder /app/healthcheck.js .
+  COPY --from=builder /app/views ./views
   
   # 更改权限（在非 root 用户前设置目录权限）
   RUN chown -R nestjs:nodejs /app

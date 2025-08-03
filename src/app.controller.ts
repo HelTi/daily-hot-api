@@ -1,4 +1,4 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Render } from '@nestjs/common';
 import { AppService } from './app.service';
 import { CacheService } from './cache/cache.service';
 
@@ -10,8 +10,9 @@ export class AppController {
   ) {}
 
   @Get()
-  getHello(): string {
-    return this.appService.getHello();
+  @Render('home')
+  getHello() {
+    return this.appService.getHomeData();
   }
 
   // 健康检查

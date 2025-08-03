@@ -6,6 +6,7 @@ import { LoggerMiddleware } from './common/middlewares/logger.middleware';
 import { AppConfigModule } from './config/config.module';
 import { HotListsModule } from './host-lists/hot-lists.module';
 import { TokenModule } from './token/token.module';
+
 @Module({
   imports: [CacheModule, AppConfigModule, HotListsModule, TokenModule],
   controllers: [AppController],
