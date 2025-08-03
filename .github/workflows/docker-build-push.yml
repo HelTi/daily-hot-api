@@ -1,4 +1,4 @@
-name: CI ▶ Build & Push Docker Image
+name: CI ▶ Build & Push Multi-Arch Docker Image
 
 on:
   push:
@@ -13,7 +13,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Set up QEMU (for cross-platform builds)
+      # —— 新增：把 GitHub 仓库 owner 转成小写，存入环境变量 OWNER_LC ——  
+      - name: Set lower case owner name
+        run: echo "OWNER_LC=${OWNER,,}" >> $GITHUB_ENV
+        env:
+          OWNER: ${{ github.repository_owner }}
+
+      - name: Set up QEMU (for cross-platform emulation)
         uses: docker/setup-qemu-action@v2
 
       - name: Set up Docker Buildx
@@ -26,15 +32,15 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push Docker image
+      - name: Build and push Docker image (multi-arch)
         uses: docker/build-push-action@v4
         with:
           context: .
           file: ./Dockerfile
           push: true
-          platforms: linux/amd64
+          platforms: linux/amd64,linux/arm64
           cache-from: type=gha
           cache-to: type=gha,mode=max
           tags: |
-            ghcr.io/${{ github.repository_owner }}/daily-hot-api:latest
-            ghcr.io/${{ github.repository_owner }}/daily-hot-api:${{ github.sha }}
+            ghcr.io/${{ env.OWNER_LC }}/${{ github.event.repository.name }}:latest
+            ghcr.io/${{ env.OWNER_LC }}/${{ github.event.repository.name }}:${{ github.sha }}
