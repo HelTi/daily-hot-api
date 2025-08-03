@@ -1,10 +1,14 @@
-import { IsBoolean, IsOptional, IsString } from 'class-validator';
+import { IsOptional, IsString } from 'class-validator';
 import { Transform } from 'class-transformer';
 
 export class HotListQueryDto {
   @IsOptional()
-  @IsBoolean()
-  @Transform(({ value }) => value === 'true')
+  @Transform(({ value }) => {
+    if (value === undefined || value === null) return false;
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'string') return value === 'true';
+    return false;
+  })
   noCache?: boolean;
 
   @IsOptional()
@@ -12,8 +16,12 @@ export class HotListQueryDto {
   limit?: string;
 
   @IsOptional()
-  @IsBoolean()
-  @Transform(({ value }) => value === 'true')
+  @Transform(({ value }) => {
+    if (value === undefined || value === null) return false;
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'string') return value === 'true';
+    return false;
+  })
   rss?: boolean;
 
   @IsOptional()

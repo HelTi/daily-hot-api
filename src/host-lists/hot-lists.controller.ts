@@ -33,7 +33,6 @@ export class HotListsController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const { noCache = false, limit, rss, ...otherParams } = query;
-
     // 获取热榜数据
     const listData = await this.hotListsService.getHotList(
       source,

@@ -108,10 +108,12 @@ export class HttpClientService {
       responseType = 'json',
     } = options;
     const cacheKey = `http:${url}`;
+    // 如果明确设置了 noCache 为 true，删除缓存
     if (noCache) {
-      this.logger.log(`🗑️ [Redis] Deleting cache for ${cacheKey}`);
+      this.logger.log(`🗑️ Redis] Deleting cache for ${cacheKey}`);
       await this.cacheService.del(cacheKey);
     } else {
+      // 尝试从缓存获取数据
       const cachedData = await this.cacheService.get<ResponseData<T>>(cacheKey);
       if (cachedData) {
         this.logger.log(`📦 [Redis] Using cached data for ${cacheKey}`);
@@ -184,6 +186,7 @@ export class HttpClientService {
       this.logger.log(`🗑️ [Redis] Deleting cache for ${cacheKey}`);
       await this.cacheService.del(cacheKey);
     } else {
+      // 尝试从缓存获取数据
       const cachedData = await this.cacheService.get<ResponseData<T>>(cacheKey);
       if (cachedData) {
         this.logger.log(`📦 [Redis] Using cached data for ${cacheKey}`);

@@ -100,7 +100,6 @@ export class DouyinSource implements HotListSource {
       headers,
       noCache,
     });
-    console.log('response11', response);
 
     const apiData = response.data?.data?.word_list || [];
 

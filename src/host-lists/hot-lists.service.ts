@@ -109,7 +109,7 @@ export class HotListsService implements OnModuleInit {
         total: result.data.length,
         data: result.data,
         fromCache, // 使用从源数据中提取或推断的缓存状态
-        updateTime: new Date().toISOString(),
+        updateTime: result?.updateTime ?? new Date().toISOString(),
         params: result.params,
       };
 

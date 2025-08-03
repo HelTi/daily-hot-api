@@ -118,7 +118,6 @@ export class WeiboSource implements HotListSource {
     });
 
     const rawHtml = htmlResp.data;
-    console.log('rawHtml', rawHtml);
     const $ = cheerio.load(rawHtml);
     const list: HotListItem[] = [];
 
