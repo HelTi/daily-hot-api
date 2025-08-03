@@ -8,7 +8,7 @@
   COPY package*.json ./
   
   # 安装所有依赖（含 devDependencies）用于构建
-  RUN npm ci --no-audit --prefer-offline
+  RUN npm install
   
   # 复制源代码
   COPY . .
@@ -29,7 +29,7 @@
   COPY package*.json ./
   
   # 只安装生产依赖
-  RUN npm ci --omit=dev --no-audit --prefer-offline
+  RUN npm install --omit=dev --no-audit --prefer-offline
   
   # 复制构建产物和必要运行文件
   COPY --from=builder /app/dist ./dist
