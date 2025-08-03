@@ -2,7 +2,7 @@
 
 一个基于 NestJS 的每日热榜聚合 API 服务，支持多个平台的热榜数据获取，支持本地部署，pm2部署、docker部署。
 
-本项目由 [msyy/DailyHotApi](https://github.com/imsyy/DailyHotApi) 项目改造而来，原项目使用的hono框架，因为本人使用的nestjs较多，为了后面项目功能的扩展便改用了nestjs。
+本项目由 [msyy/DailyHotApi](https://github.com/imsyy/DailyHotApi) 项目改造而来，原项目使用的hono框架，本项目使用的 nestjs。
 
 ## 功能特性
 
@@ -15,7 +15,7 @@
 - **语言**: TypeScript
 
 ## 本地运行
-
+安装 node 版本 >= 20，安装redis
 ```bash
 # clone项目
 git clone https://github.com/HelTi/daily-hot-api.git
@@ -126,6 +126,7 @@ docker run --restart always -p 6688:6688 -d ttkit/daily-hot-api:latest
 | `PORT` | 服务端口 | `6689` |
 | `REDIS_HOST` | Redis 主机 | `localhost` |
 | `REDIS_PORT` | Redis 端口 | `6379` |
+| `REDIS_PASSWORD` | Redis 密码 | `` |
 | `CACHE_TTL` | 缓存过期时间（秒） | `3600` |
 
 ### TODO，失效接口改造

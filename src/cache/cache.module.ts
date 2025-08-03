@@ -10,7 +10,11 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
         type: 'single',
-        url: `redis://${configService.get('REDIS_HOST')}:${configService.get('REDIS_PORT')}`,
+        options: {
+          host: configService.get('REDIS_HOST'),
+          port: configService.get('REDIS_PORT'),
+          password: configService.get('REDIS_PASSWORD'),
+        },
         onClientReady: (client) => {
           console.log('Redis client ready', client);
         },
