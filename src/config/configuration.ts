@@ -12,4 +12,5 @@ export default (): ConfigType => ({
   REDIS_HOST: process.env.REDIS_HOST || '127.0.0.1',
   REDIS_PORT: parseInt(process.env.REDIS_PORT) || 6379,
   REDIS_PASSWORD: process.env.REDIS_PASSWORD || '',
+  NOT_ALLOWED_REFRESH_SOURCE: process.env.NOT_ALLOWED_REFRESH_SOURCE || '',
 });

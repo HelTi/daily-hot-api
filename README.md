@@ -63,6 +63,7 @@ GET /hot-lists/all
 ## 开发指南
 
 ### 添加新的热榜数据源
+数据源使用 DiscoveryModule 实现动态注册服务功能。
 
 1. 在 `src/host-lists/sources/` 目录下创建新的数据源文件
 2. 实现 `HotListSource` 接口
@@ -84,6 +85,7 @@ export class ExampleSource implements HotListSource {
   }
 }
 ```
+然后在 **hot-lists.module.ts** 中引入该源。
 
 ## 部署
 
@@ -111,8 +113,9 @@ $ make deploy
 docker镜像部署：
 ```bash
 # 拉取镜像
-docker pull docker push ttkit/daily-hot-api:latest
-
+docker pull ttkit/daily-hot-api:latest
+# 或者使用github的镜像源拉取镜像
+docker pull ghcr.io/helti/daily-hot-api:latest
 # 运行
 docker run --restart always -p 6688:6688 -d ttkit/daily-hot-api:latest
 ```

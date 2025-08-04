@@ -32,7 +32,19 @@ export class HotListsController {
     @Query() query: HotListQueryDto,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const { noCache = false, limit, rss, ...otherParams } = query;
+    const { limit, rss, ...otherParams } = query;
+    let { noCache = false } = query;
+    // 获取不允许手动刷新的源
+    const notAllowedRefreshSource = this.configService.get(
+      'NOT_ALLOWED_REFRESH_SOURCE',
+    );
+    // 判断是否不允许手动刷新
+    const hasNotRefresh = notAllowedRefreshSource.split(',').includes(source);
+
+    if (hasNotRefresh) {
+      noCache = false;
+    }
+
     // 获取热榜数据
     const listData = await this.hotListsService.getHotList(
       source,

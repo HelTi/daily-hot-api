@@ -18,6 +18,7 @@ export const configValidationSchema = z.object({
   REDIS_HOST: z.string().default('127.0.0.1'),
   REDIS_PORT: z.coerce.number().default(6379),
   REDIS_PASSWORD: z.string().default(''),
+  NOT_ALLOWED_REFRESH_SOURCE: z.string().default(''),
 });
 
 export type ConfigType = z.infer<typeof configValidationSchema>;
