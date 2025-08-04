@@ -1,6 +1,7 @@
+/* eslint-disable @typescript-eslint/no-unsafe-return */
 import { Injectable, Logger } from '@nestjs/common';
-import { Feed } from 'feed';
 import { RouterData } from 'src/host-lists/interfaces/router-data.interface';
+import RSS from 'rss';
 
 @Injectable()
 export class RssService {
@@ -14,32 +15,31 @@ export class RssService {
   generateRss(data: RouterData): string {
     try {
       // 创建RSS订阅
-      const feed = new Feed({
+      const feed = new RSS({
         title: `${data.title} - ${data.type}`,
         description: data.description || `${data.title}的${data.type}`,
-        id: data.name,
-        link: data.link,
+        feed_url: data.link,
+        site_url: data.link,
         language: 'zh',
         generator: 'daily-hot-api',
         copyright: 'Copyright © 2020-present Helti',
-        updated: new Date(data.updateTime),
+        pubDate: new Date(data.updateTime),
       });
 
       // 添加项目
       data.data.forEach((item) => {
-        feed.addItem({
+        feed.item({
           title: item.title,
           description: item.desc || item.title,
-          link: item.url,
+          url: item.url,
           guid: item.id.toString(),
           date: item.timestamp ? new Date(item.timestamp) : new Date(),
-          enclosure: item.cover ? { url: item.cover } : undefined,
-          author: [{ name: item.author || '' }],
+          author: item.author || '',
         });
       });
 
       // 生成XML
-      const xml = feed.rss2();
+      const xml = feed.xml({ indent: true });
       return xml;
     } catch (error: any) {
       this.logger.error(`Failed to generate RSS: ${error}`);

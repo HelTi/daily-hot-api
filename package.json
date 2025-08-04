@@ -46,6 +46,7 @@
     "md5": "^2.3.0",
     "mongoose": "^8.14.2",
     "reflect-metadata": "^0.2.2",
+    "rss": "^1.2.2",
     "rss-parser": "^3.13.0",
     "rxjs": "^7.8.1",
     "user-agents": "^1.1.542",
