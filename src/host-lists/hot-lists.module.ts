@@ -60,6 +60,7 @@ import { WereadSource } from './sources/weread.source';
 import { YicaiSource } from './sources/yicai.source';
 import { YystvSource } from './sources/yystv.source';
 import { ZhihuDailySource } from './sources/zhihu-daily.source';
+import { HupuSource } from './sources/hupu.source';
 @Module({
   imports: [
     // 用于自动发现源
@@ -131,6 +132,7 @@ import { ZhihuDailySource } from './sources/zhihu-daily.source';
     YicaiSource,
     YystvSource,
     ZhihuDailySource,
+    HupuSource,
   ] as Provider[],
   exports: [HotListsService],
 })

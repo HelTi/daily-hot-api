@@ -15,7 +15,7 @@ interface WallstreetApiResponse {
 
 @Injectable()
 @HotSource({
-  name: 'wallstreetcn',
+  name: 'wallstreet',
   title: '华尔街见闻',
   type: '热门文章',
   link: 'https://wallstreetcn.com/',
