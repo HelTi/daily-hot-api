@@ -1,7 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import Redis from 'ioredis';
 import { ConfigService } from '@nestjs/config';
+import { CACHE_MANAGER, Cache } from '@nestjs/cache-manager';
 
 export type CacheData<T> = {
   data: T; // 缓存数据
@@ -12,13 +13,27 @@ export type CacheData<T> = {
 export class CacheService {
   private readonly DEFAULT_TTL: number;
   private readonly logger = new Logger(CacheService.name);
+  private useMemoryCache = false; // 标记是否使用内存缓存
 
   constructor(
     @InjectRedis() private readonly redis: Redis,
     private readonly configService: ConfigService,
+    @Inject(CACHE_MANAGER) private readonly memoryCache: Cache,
   ) {
     // 默认缓存时间为1小时
     this.DEFAULT_TTL = this.configService.get<number>('CACHE_TTL', 3600);
+    void this.checkRedisConnection();
+  }
+
+  // 检查Redis连接状态
+  private async checkRedisConnection(): Promise<void> {
+    try {
+      await this.redis.ping();
+      this.logger.log('Redis 连接正常');
+    } catch {
+      this.useMemoryCache = true;
+      this.logger.warn('Redis 不可用，已降级到内存缓存');
+    }
   }
 
   /**
@@ -27,6 +42,9 @@ export class CacheService {
    * @returns 缓存数据或null
    */
   async get<T>(key: string): Promise<T | null> {
+    if (this.useMemoryCache) {
+      return this.getFromMemory<T>(key);
+    }
     try {
       const data = await this.redis.get(key);
       if (!data) return null;
@@ -51,6 +69,9 @@ export class CacheService {
     value: CacheData<unknown>,
     ttl: number = this.DEFAULT_TTL,
   ): Promise<void> {
+    if (this.useMemoryCache) {
+      return this.setToMemory(key, value, ttl);
+    }
     try {
       await this.redis.set(key, JSON.stringify(value), 'EX', ttl);
       this.logger.log(`💾 [REDIS] ${key} has been cached for ${ttl}s`);
@@ -64,6 +85,9 @@ export class CacheService {
    * @param key 缓存键
    */
   async del(key: string): Promise<void> {
+    if (this.useMemoryCache) {
+      return this.delFromMemory(key);
+    }
     try {
       await this.redis.del(key);
       this.logger.log(`🗑️ [REDIS] Deleted cache for ${key}`);
@@ -77,6 +101,9 @@ export class CacheService {
    * @param prefix 缓存键前缀
    */
   async delByPattern(prefix: string): Promise<void> {
+    if (this.useMemoryCache) {
+      return this.delFromMemory(prefix);
+    }
     try {
       const keys = await this.redis.keys(`${prefix}*`);
       if (keys.length > 0) {
@@ -100,6 +127,40 @@ export class CacheService {
     } catch (error) {
       this.logger.error('Redis ping failed', error);
       return false;
+    }
+  }
+
+  // =============== 内存缓存方法 ===============
+  private async getFromMemory<T>(key: string): Promise<T | null> {
+    try {
+      const data = await this.memoryCache.get<T>(key);
+      this.logger.debug(`[MEMORY] Cache hit for key: ${key}`);
+      return data as T;
+    } catch (error) {
+      this.logger.error(`内存缓存读取失败: ${error.message}`);
+      return null;
+    }
+  }
+
+  private async setToMemory(
+    key: string,
+    value: CacheData<unknown>,
+    ttl: number,
+  ): Promise<void> {
+    try {
+      await this.memoryCache.set(key, value, ttl * 1000); // 转换为毫秒
+      this.logger.log(`💾 [MEMORY] ${key} cached for ${ttl}s`);
+    } catch (error) {
+      this.logger.error(`内存缓存写入失败: ${error.message}`);
+    }
+  }
+
+  private async delFromMemory(key: string): Promise<void> {
+    try {
+      await this.memoryCache.del(key);
+      this.logger.log(`🗑️ [MEMORY] Deleted cache for ${key}`);
+    } catch (error) {
+      this.logger.error(`内存缓存删除失败: ${error.message}`);
     }
   }
 }
