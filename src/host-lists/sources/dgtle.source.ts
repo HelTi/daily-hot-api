@@ -32,7 +32,6 @@ export class DgtleSource implements HotListSource {
       url,
       noCache,
     });
-    console.log(result);
     const list = result.data?.items || [];
     return {
       data: list.map((v) => ({

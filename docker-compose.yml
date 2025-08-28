@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   app:
     build: .
@@ -13,8 +11,12 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - REDIS_URI=redis://redis:6379
+      - MONGODB_URI=mongodb://mongodb:27017/daily-hot-api
+      - SCHEDULER_AUTO_START=true
+      - SCHEDULER_CRON_EXPRESSION=0 */12 * * *
     depends_on:
       - redis
+      - mongodb
     restart: unless-stopped
     networks:
       - app-network
@@ -32,8 +34,20 @@ services:
     networks:
       - app-network
 
+  mongodb:
+    image: mongo:7.0
+    container_name: daily-hot-mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    restart: unless-stopped
+    networks:
+      - app-network
+
 volumes:
   redis_data:
+  mongodb_data:
 
 networks:
   app-network:

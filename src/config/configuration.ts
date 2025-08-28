@@ -13,4 +13,10 @@ export default (): ConfigType => ({
   REDIS_PORT: parseInt(process.env.REDIS_PORT) || 6379,
   REDIS_PASSWORD: process.env.REDIS_PASSWORD || '',
   NOT_ALLOWED_REFRESH_SOURCE: process.env.NOT_ALLOWED_REFRESH_SOURCE || '',
+  IGNORE_SAVE_SOURCES: process.env.IGNORE_SAVE_SOURCES || '',
+  MONGODB_URI: process.env.MONGODB_URI || '',
+  // 定时任务配置
+  SCHEDULER_AUTO_START: process.env.SCHEDULER_AUTO_START === 'true',
+  SCHEDULER_CRON_EXPRESSION:
+    process.env.SCHEDULER_CRON_EXPRESSION || '0 */12 * * *',
 });

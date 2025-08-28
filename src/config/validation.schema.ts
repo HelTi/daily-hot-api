@@ -19,6 +19,14 @@ export const configValidationSchema = z.object({
   REDIS_PORT: z.coerce.number().default(6379),
   REDIS_PASSWORD: z.string().default(''),
   NOT_ALLOWED_REFRESH_SOURCE: z.string().default(''),
+  IGNORE_SAVE_SOURCES: z.string().default(''),
+  MONGODB_URI: z.string().default(''),
+  // 定时任务配置
+  SCHEDULER_AUTO_START: z.preprocess(
+    (val) => val === 'true',
+    z.boolean().default(true),
+  ),
+  SCHEDULER_CRON_EXPRESSION: z.string().default('0 */12 * * *'),
 });
 
 export type ConfigType = z.infer<typeof configValidationSchema>;
