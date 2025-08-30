@@ -47,10 +47,7 @@ export class HotItemRepository {
   }
 
   // 验证和清理数据
-  private validateAndCleanItem(
-    item: HotListItem,
-    source: string,
-  ): HotListItem | null {
+  private validateAndCleanItem(item: HotListItem): HotListItem | null {
     // 检查必填字段
     if (
       !item.title ||
@@ -60,50 +57,15 @@ export class HotItemRepository {
       return null;
     }
 
-    // 处理 URL
-    let url = item.url;
-    if (!url || typeof url !== 'string') {
-      // 如果没有 URL，生成一个基于标题的唯一标识符
-      url = `${source}://${Buffer.from(item.title).toString('base64')}`;
-    } else {
-      url = url.trim();
-      if (url === '') {
-        url = `${source}://${Buffer.from(item.title).toString('base64')}`;
-      }
-    }
-
-    // 处理 mobileUrl
-    let mobileUrl = item.mobileUrl;
-    if (
-      !mobileUrl ||
-      typeof mobileUrl !== 'string' ||
-      mobileUrl.trim() === ''
-    ) {
-      mobileUrl = url; // 默认使用普通 URL
-    }
-
     return {
       ...item,
       title: item.title.trim(),
       desc: item.desc?.trim() || '',
-      url,
-      mobileUrl,
+      url: item.url,
+      mobileUrl: item.mobileUrl,
       author: item.author?.trim() || '',
       hot: item.hot || 0,
     };
-  }
-
-  // 生成唯一标识符（用于处理重复URL的情况）
-  private generateUniqueUrl(
-    originalUrl: string,
-    source: string,
-    title: string,
-    index: number,
-  ): string {
-    if (index === 0) {
-      return originalUrl;
-    }
-    return `${originalUrl}#${source}-${index}-${Buffer.from(title).toString('base64').substring(0, 8)}`;
   }
 
   // 批量保存数据（去重）
@@ -117,7 +79,7 @@ export class HotItemRepository {
 
     // 1. 验证和清理数据
     const validItems = items
-      .map((item) => this.validateAndCleanItem(item, source))
+      .map((item) => this.validateAndCleanItem(item))
       .filter((item): item is HotListItem => item !== null);
 
     const validCount = validItems.length;
@@ -134,22 +96,15 @@ export class HotItemRepository {
       return 0;
     }
 
-    // 2. 处理相同URL的情况 - 为相同URL添加唯一后缀
+    // 2. 处理相同URL的情况
     const urlCountMap = new Map<string, number>();
     const processedItems = validItems.map((item) => {
       const baseUrl = item.url;
       const count = urlCountMap.get(baseUrl) || 0;
       urlCountMap.set(baseUrl, count + 1);
 
-      const uniqueUrl = this.generateUniqueUrl(
-        baseUrl,
-        source,
-        item.title,
-        count,
-      );
       return {
         ...item,
-        url: uniqueUrl,
       };
     });
 
@@ -174,21 +129,37 @@ export class HotItemRepository {
     }));
 
     try {
-      // 6. 批量插入新数据
-      await this.hotItemModel.insertMany(documents, { ordered: false });
-      this.logger.log(
-        `Successfully saved ${newItems.length} new items for source: ${source} (${originalCount} -> ${validCount} -> ${newItems.length})`,
+      // 6. 使用 upsert 策略，避免重复数据问题
+      this.logger.debug(
+        `Attempting to insert ${documents.length} documents for source: ${source}`,
       );
-      return newItems.length;
-    } catch (error: any) {
-      // 处理部分插入失败的情况
-      if (error.name === 'BulkWriteError') {
-        const successCount = Number(error.result?.insertedCount) || 0;
-        this.logger.warn(
-          `Partial insert success for source ${source}: ${successCount} out of ${documents.length} items saved. Error: ${error.message}`,
-        );
-        return successCount;
+
+      // 逐个插入，使用 upsert 策略
+      let insertedCount = 0;
+      for (const doc of documents) {
+        try {
+          const result = await this.hotItemModel.findOneAndUpdate(
+            { source: doc.source, url: doc.url },
+            doc,
+            { upsert: true, new: true },
+          );
+          if (result) {
+            insertedCount++;
+          }
+        } catch (singleError) {
+          this.logger.warn(
+            `Failed to insert single document for ${source}:`,
+            singleError,
+          );
+          // 继续处理下一个文档
+        }
       }
+      this.logger.log(
+        `Successfully saved ${insertedCount} items for source: ${source} (${originalCount} -> ${validCount} -> ${insertedCount})`,
+      );
+      return insertedCount;
+    } catch (error: any) {
+      console.error('Insert error:', error);
       this.logger.error(`Failed to save items for source ${source}:`, error);
       return 0;
     }
@@ -254,7 +225,7 @@ export class HotItemRepository {
 
   // 获取数据源列表
   async getSources(): Promise<string[]> {
-    const sources = await this.hotItemModel.distinct('source');
+    const sources: string[] = await this.hotItemModel.distinct('source');
     return sources.sort();
   }
 
