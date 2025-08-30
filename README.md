@@ -57,6 +57,11 @@ GET /hot-lists/{sourceName}
 查询参数：
 - `noCache`: 是否跳过缓存（可选）
 
+热点类型：
+- `type`: 具体的热点类型（可选）
+
+示例：/hot-lists/juejin?type=1
+
 ### 查看所有接口
 
 ```
@@ -78,7 +83,7 @@ GET /api/scheduler/status
 POST /api/scheduler/trigger
 ```
 
-详细的历史功能使用说明请参考：[HISTORY_FEATURE.md](./HISTORY_FEATURE.md)
+详细的历史功能使用说明请参考：[HISTORY_FEATURE.md](./HISTORY_FEATURE.md)、[DYNAMIC_SCHEDULER.md](./DYNAMIC_SCHEDULER.md)
 
 ## 开发指南
 
@@ -152,6 +157,7 @@ docker run --restart always -p 6688:6688 -d ttkit/daily-hot-api:latest
 | `REDIS_PASSWORD` | Redis 密码 | `` |
 | `CACHE_TTL` | 缓存过期时间（秒） | `3600` |
 
+更多配置查看 .env.example
 ### TODO，失效接口改造
 nodeseek,nytimes,linuxdo,producthunt
 
@@ -164,7 +170,7 @@ nodeseek,nytimes,linuxdo,producthunt
 - 本项目保留对 `API` 的随时更改、停用、限制使用等措施的权利。任何因使用本 `API` 产生的损失，本项目不负担任何赔偿和责任
 
 ## 😘 鸣谢
-本项目由 https://github.com/imsyy/DailyHotApi 改造而来。
+部分数据源来自 https://github.com/imsyy/DailyHotApi 。
 
 ## 许可证
 

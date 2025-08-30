@@ -105,7 +105,7 @@ SCHEDULER_CRON_EXPRESSION=0 */2 * * *
 
 ### 查看定时任务状态
 ```bash
-curl http://localhost:6689/api/scheduler/status
+curl http://localhost:6688/api/scheduler/status
 ```
 
 响应示例：
@@ -122,26 +122,26 @@ curl http://localhost:6689/api/scheduler/status
 
 ### 手动启动定时任务
 ```bash
-curl -X POST http://localhost:6689/api/scheduler/start
+curl -X POST http://localhost:6688/api/scheduler/start
 ```
 
 ### 手动停止定时任务
 ```bash
-curl -X POST http://localhost:6689/api/scheduler/stop
+curl -X POST http://localhost:6688/api/scheduler/stop
 ```
 
 ### 重新配置定时任务
 ```bash
-curl -X POST http://localhost:6689/api/scheduler/reconfigure
+curl -X POST http://localhost:6688/api/scheduler/reconfigure
 ```
 
 ### 手动触发数据抓取
 ```bash
 # 抓取所有数据源
-curl -X POST http://localhost:6689/api/scheduler/trigger
+curl -X POST http://localhost:6688/api/scheduler/trigger
 
 # 抓取特定数据源
-curl -X POST http://localhost:6689/api/scheduler/trigger \
+curl -X POST http://localhost:6688/api/scheduler/trigger \
   -H "Content-Type: application/json" \
   -d '{"source": "zhihu"}'
 ```
