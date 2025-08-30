@@ -155,7 +155,6 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
   // 处理定时任务
   private async processScheduledTasks() {
     const enabledConfigs = await this.sourceConfigRepository.findEnabled();
-    const now = new Date();
 
     for (const config of enabledConfigs) {
       // 检查是否应该忽略该数据源
@@ -164,32 +163,12 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
         continue;
       }
 
-      const shouldFetch = this.shouldFetchData(config, now);
-
-      if (shouldFetch) {
-        this.logger.log(`Scheduling fetch for source: ${config.source}`);
-        // 异步执行，不等待完成
-        this.fetchHotDataTask.execute(config.source).catch((error) => {
-          this.logger.error(
-            `Failed to fetch data for ${config.source}:`,
-            error,
-          );
-        });
-      }
+      this.logger.log(`Scheduling fetch for source: ${config.source}`);
+      // 异步执行，不等待完成
+      this.fetchHotDataTask.execute(config.source).catch((error) => {
+        this.logger.error(`Failed to fetch data for ${config.source}:`, error);
+      });
     }
-  }
-
-  // 判断是否应该抓取数据
-  private shouldFetchData(config: any, now: Date): boolean {
-    if (!config.lastFetchAt) {
-      return true;
-    }
-
-    const lastFetch = new Date(config.lastFetchAt);
-    const timeDiff = now.getTime() - lastFetch.getTime();
-    const intervalMs = config.interval * 60 * 1000; // 转换为毫秒
-
-    return timeDiff >= intervalMs;
   }
 
   // 手动触发数据抓取
