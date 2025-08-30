@@ -32,7 +32,7 @@ export class GeekparkSource implements HotListSource {
       url,
       noCache,
     });
-    console.log(result);
+    // console.log(result);
     const list = result.data?.homepage_posts || [];
     return {
       data: list.map((v) => {
