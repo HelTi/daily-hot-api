@@ -188,7 +188,11 @@ export class HotItemRepository {
     }
 
     if (keyword) {
-      query.$text = { $search: keyword };
+      // 使用正则表达式进行模糊搜索，支持title和desc字段
+      query.$or = [
+        { title: { $regex: keyword, $options: 'i' } },
+        { desc: { $regex: keyword, $options: 'i' } },
+      ];
     }
 
     if (startDate || endDate) {
