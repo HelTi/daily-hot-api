@@ -2,6 +2,8 @@
 /dist
 /node_modules
 /build
+# 备份数据文件夹
+/data
 
 # Logs
 logs

@@ -10,6 +10,12 @@ import { HotListsService } from '../host-lists/hot-lists.service';
 import { SourceConfigRepository } from '../database/repositories/source-config.repository';
 import { FetchHotDataTask } from './tasks/fetch-hot-data.task';
 import { CronJob } from 'cron';
+import { exec as execCallback } from 'child_process';
+import { promisify } from 'util';
+import * as fs from 'fs';
+import * as path from 'path';
+
+const exec = promisify(execCallback);
 
 @Injectable()
 export class SchedulerService implements OnModuleInit, OnModuleDestroy {
@@ -17,6 +23,7 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
   private isRunning = false;
   private schedulerEnabled = false;
   private readonly cronJobName = 'hot-data-fetch';
+  private readonly backupCronJobName = 'mongodb-backup';
 
   private readonly ignoreSources: string[] = [];
 
@@ -34,10 +41,12 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
   async onModuleInit() {
     await this.initializeSourceConfigs();
     this.setupDynamicCronJob();
+    this.setupBackupCronJob();
   }
 
   onModuleDestroy() {
     this.stopDynamicCronJob();
+    this.stopBackupCronJob();
   }
 
   // 加载忽略的数据源配置
@@ -110,6 +119,68 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
       }
     } catch (error) {
       this.logger.error('Failed to stop cron job:', error);
+    }
+  }
+
+  // 每日数据库备份定时任务（每天凌晨1点）
+  private setupBackupCronJob() {
+    if (!this.schedulerEnabled) {
+      return;
+    }
+    try {
+      this.stopBackupCronJob();
+
+      const backupCronExpression =
+        this.configService.get<string>('BACKUP_CRON_EXPRESSION') || '0 1 * * *';
+      const job = new CronJob(backupCronExpression, () => {
+        void this.runMongoBackup();
+      });
+
+      this.schedulerRegistry.addCronJob(this.backupCronJobName, job);
+      job.start();
+      this.logger.log(
+        `Backup cron job setup with expression: ${backupCronExpression}`,
+      );
+    } catch (error) {
+      this.logger.error('Failed to setup backup cron job:', error);
+    }
+  }
+
+  // 停止备份任务
+  private stopBackupCronJob() {
+    try {
+      if (this.schedulerRegistry.doesExist('cron', this.backupCronJobName)) {
+        this.schedulerRegistry.deleteCronJob(this.backupCronJobName);
+        this.logger.log(`Stopped cron job: ${this.backupCronJobName}`);
+      }
+    } catch (error) {
+      this.logger.error('Failed to stop backup cron job:', error);
+    }
+  }
+
+  // 执行 mongodump 备份
+  private async runMongoBackup() {
+    try {
+      const mongoUri =
+        this.configService.get<string>('MONGODB_URI') ||
+        'mongodb://localhost:27017/daily-hot-api';
+
+      const projectRoot = process.cwd();
+      const dataRootDir = path.resolve(projectRoot, 'data');
+      const backupOutDir = dataRootDir; // 直接备份到 data 目录
+
+      // 清理旧备份并确保目录存在
+      fs.rmSync(backupOutDir, { recursive: true, force: true });
+      fs.mkdirSync(backupOutDir, { recursive: true });
+
+      const dumpCommand = `mongodump --uri="${mongoUri}" --out="${backupOutDir}"`;
+      this.logger.log(`Starting MongoDB backup to ${backupOutDir}`);
+      const { stdout, stderr } = await exec(dumpCommand);
+      if (stdout) this.logger.log(stdout.trim());
+      if (stderr) this.logger.warn(stderr.trim());
+      this.logger.log('MongoDB backup completed');
+    } catch (error) {
+      this.logger.error('MongoDB backup failed:', error as Error);
     }
   }
 

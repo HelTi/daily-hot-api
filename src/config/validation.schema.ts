@@ -27,6 +27,7 @@ export const configValidationSchema = z.object({
     z.boolean().default(true),
   ),
   SCHEDULER_CRON_EXPRESSION: z.string().default('0 */12 * * *'),
+  BACKUP_CRON_EXPRESSION: z.string().default('0 1 * * *'),
 });
 
 export type ConfigType = z.infer<typeof configValidationSchema>;
