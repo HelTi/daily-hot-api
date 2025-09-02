@@ -1,13 +1,13 @@
-# Daily Hot API
+# daily-hot-api
 
-一个基于 NestJS 的每日热榜聚合 API 服务，支持多个平台的热榜数据获取，支持本地部署，pm2部署、docker部署，支持定时保存热点数据，支持查询历史热点数据。
+一个基于 NestJS 的每日热榜聚合 API 服务，支持多个平台的热榜数据获取，支持手动部署，pm2部署、docker部署，支持定时保存热点数据与备份数据，支持查询历史热点数据。
 
 ## 功能特性
 
 - 🔥 支持多平台热榜数据聚合（知乎、bilibili、百度、豆瓣、稀土掘金等）
 - 🚀 基于 Redis 的高效缓存机制
 - 📊 历史热点数据存储和查询功能
-- ⏰ 定时自动抓取热点数据
+- ⏰ 定时自动抓取热点数据，历史数据定时备份
 - 🔍 支持全文搜索和高级查询
 - 🎯 基于 URL 的数据去重机制
 
@@ -156,6 +156,10 @@ docker run --restart always -p 6688:6688 -d ttkit/daily-hot-api:latest
 | `REDIS_PORT` | Redis 端口 | `6379` |
 | `REDIS_PASSWORD` | Redis 密码 | `` |
 | `CACHE_TTL` | 缓存过期时间（秒） | `3600` |
+| `MONGODB_URI` | MongoDB 连接字符串 | `` |
+| `SCHEDULER_AUTO_START` | 是否自动启动定时抓取任务 | `false` |
+| `SCHEDULER_CRON_EXPRESSION` | 定时抓取任务 Cron 表达式 | `0 */12 * * *` |
+| `BACKUP_CRON_EXPRESSION` | 定时备份任务 Cron 表达式 | `0 1 * * *` |
 
 更多配置查看 .env.example
 ### TODO，失效接口改造

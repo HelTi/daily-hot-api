@@ -19,4 +19,5 @@ export default (): ConfigType => ({
   SCHEDULER_AUTO_START: process.env.SCHEDULER_AUTO_START === 'true',
   SCHEDULER_CRON_EXPRESSION:
     process.env.SCHEDULER_CRON_EXPRESSION || '0 */12 * * *',
+  BACKUP_CRON_EXPRESSION: process.env.BACKUP_CRON_EXPRESSION || '0 1 * * *',
 });
