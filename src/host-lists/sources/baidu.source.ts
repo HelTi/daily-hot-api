@@ -52,7 +52,7 @@ export class BaiduSource implements HotListSource {
     };
     const jsonObject: any = parsedData.cards[0].content;
     const hotList = jsonObject[0]?.content || [];
-    console.log('baidu hotList', hotList);
+    // console.log('baidu hotList', hotList);
     const list = hotList.map((v: RouterType['baidu']) => ({
       id: v.index,
       title: v.word || v?.title,
