@@ -11,7 +11,10 @@ const typeMap: Record<string, string> = {
   movie: '电影',
   teleplay: '电视剧',
   car: '汽车',
-  game: '游戏',
+};
+
+const setDesc = (desc: string[] | string) => {
+  return Array.isArray(desc) ? desc.join('\n') : desc;
 };
 
 @Injectable()
@@ -47,16 +50,21 @@ export class BaiduSource implements HotListSource {
     const parsedData = JSON.parse(matchResult[1]) as {
       cards: [{ content: RouterType['baidu'][] }];
     };
-    const jsonObject: RouterType['baidu'][] = parsedData.cards[0].content;
-    const list = jsonObject.map((v: RouterType['baidu']) => ({
+    const jsonObject: any = parsedData.cards[0].content;
+    const hotList = jsonObject[0]?.content || [];
+    console.log('baidu hotList', hotList);
+    const list = hotList.map((v: RouterType['baidu']) => ({
       id: v.index,
-      title: v.word,
-      desc: v.desc,
-      cover: v.img,
+      title: v.word || v?.title,
+      desc: setDesc(v.desc) || setDesc(v?.hotScore?.desc),
+      cover: v.img || v.imgInfo?.src,
       author: v.show?.length ? v.show : '',
       timestamp: 0,
-      hot: Number(v.hotScore || 0),
-      url: `https://www.baidu.com/s?wd=${encodeURIComponent(v.query)}`,
+      hot: Number(v.hotScore?.value || 0),
+      url:
+        v.hotScore?.descUrl ||
+        v.url ||
+        `https://www.baidu.com/s?wd=${encodeURIComponent(v.word || v.query)}`,
       mobileUrl: v.rawUrl,
     }));
     return {
