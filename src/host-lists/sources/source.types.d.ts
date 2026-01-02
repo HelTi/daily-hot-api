@@ -122,13 +122,22 @@ export type RouterType = {
   };
   baidu: {
     index: number;
-    word: string;
+    word?: string;
+    title?: string;
+    hotScore?: {
+      desc: string[];
+      value: number;
+      descUrl: string;
+    };
+    imgInfo: {
+      src: string;
+    };
     desc: string;
     img: string;
-    hotScore: string;
     show: string;
     rawUrl: string;
     query: string;
+    url?: string;
   };
   miyoushe: {
     post: {
