@@ -2,6 +2,8 @@
 
 一个基于 NestJS 的每日热榜聚合 API 服务，支持多个平台的热榜数据获取，支持手动部署，pm2部署、docker部署，支持定时保存热点数据与备份数据，支持查询历史热点数据。
 
+
+
 ## 功能特性
 
 - 🔥 支持多平台热榜数据聚合（知乎、bilibili、百度、豆瓣、稀土掘金等）
@@ -10,6 +12,69 @@
 - ⏰ 定时自动抓取热点数据，历史数据定时备份
 - 🔍 支持全文搜索和高级查询
 - 🎯 基于 URL 的数据去重机制
+
+## 支持的站点
+
+| 图标 | 站点名称 | 数据源 ID |
+|:----:|----------|-----------|
+| <img src="https://www.google.com/s2/favicons?domain=zhihu.com&sz=32" width="20" height="20" /> | 知乎 | `zhihu` |
+| <img src="https://www.google.com/s2/favicons?domain=daily.zhihu.com&sz=32" width="20" height="20" /> | 知乎日报 | `zhihu-daily` |
+| <img src="https://www.google.com/s2/favicons?domain=baidu.com&sz=32" width="20" height="20" /> | 百度 | `baidu` |
+| <img src="https://www.google.com/s2/favicons?domain=bilibili.com&sz=32" width="20" height="20" /> | 哔哩哔哩 | `bilibili` |
+| <img src="https://www.google.com/s2/favicons?domain=github.com&sz=32" width="20" height="20" /> | GitHub | `github` |
+| <img src="https://www.google.com/s2/favicons?domain=juejin.cn&sz=32" width="20" height="20" /> | 掘金 | `juejin` |
+| <img src="https://www.google.com/s2/favicons?domain=36kr.com&sz=32" width="20" height="20" /> | 36氪 | `36kr` |
+| <img src="https://www.google.com/s2/favicons?domain=51cto.com&sz=32" width="20" height="20" /> | 51CTO | `51cto` |
+| <img src="https://www.google.com/s2/favicons?domain=52pojie.cn&sz=32" width="20" height="20" /> | 吾爱破解 | `52pojie` |
+| <img src="https://www.google.com/s2/favicons?domain=acfun.cn&sz=32" width="20" height="20" /> | AcFun | `acfun` |
+| <img src="https://www.google.com/s2/favicons?domain=caixin.com&sz=32" width="20" height="20" /> | 财新网 | `caixin` |
+| <img src="https://www.google.com/s2/favicons?domain=cls.cn&sz=32" width="20" height="20" /> | 财联社 | `cls` |
+| <img src="https://www.google.com/s2/favicons?domain=coolapk.com&sz=32" width="20" height="20" /> | 酷安 | `coolapk` |
+| <img src="https://www.google.com/s2/favicons?domain=csdn.net&sz=32" width="20" height="20" /> | CSDN | `csdn` |
+| <img src="https://www.google.com/s2/favicons?domain=dgtle.com&sz=32" width="20" height="20" /> | 数字尾巴 | `dgtle` |
+| <img src="https://www.google.com/s2/favicons?domain=douban.com&sz=32" width="20" height="20" /> | 豆瓣讨论 | `douban-group` |
+| <img src="https://www.google.com/s2/favicons?domain=douban.com&sz=32" width="20" height="20" /> | 豆瓣电影 | `douban-movie` |
+| <img src="https://www.google.com/s2/favicons?domain=douyin.com&sz=32" width="20" height="20" /> | 抖音 | `douyin` |
+| <img src="https://www.google.com/s2/favicons?domain=geekpark.net&sz=32" width="20" height="20" /> | 极客公园 | `geekpark` |
+| <img src="https://www.google.com/s2/favicons?domain=guokr.com&sz=32" width="20" height="20" /> | 果壳 | `guokr` |
+| <img src="https://www.google.com/s2/favicons?domain=news.ycombinator.com&sz=32" width="20" height="20" /> | Hacker News | `hackernews` |
+| <img src="https://www.google.com/s2/favicons?domain=hellogithub.com&sz=32" width="20" height="20" /> | HelloGitHub | `hellogithub` |
+| <img src="https://www.google.com/s2/favicons?domain=baike.baidu.com&sz=32" width="20" height="20" /> | 历史上的今天 | `history` |
+| <img src="https://www.google.com/s2/favicons?domain=miyoushe.com&sz=32" width="20" height="20" /> | 崩坏3 | `honkai` |
+| <img src="https://www.google.com/s2/favicons?domain=hostloc.com&sz=32" width="20" height="20" /> | 全球主机交流论坛 | `hostloc` |
+| <img src="https://www.google.com/s2/favicons?domain=hupu.com&sz=32" width="20" height="20" /> | 虎扑 | `hupu` |
+| <img src="https://www.google.com/s2/favicons?domain=huxiu.com&sz=32" width="20" height="20" /> | 虎嗅 | `huxiu` |
+| <img src="https://www.google.com/s2/favicons?domain=ifanr.com&sz=32" width="20" height="20" /> | 爱范儿 | `ifanr` |
+| <img src="https://www.google.com/s2/favicons?domain=ithome.com&sz=32" width="20" height="20" /> | IT之家 | `ithome` |
+| <img src="https://www.google.com/s2/favicons?domain=ithome.com&sz=32" width="20" height="20" /> | IT之家「喜加一」 | `ithome-xijiayi` |
+| <img src="https://www.google.com/s2/favicons?domain=jianshu.com&sz=32" width="20" height="20" /> | 简书 | `jianshu` |
+| <img src="https://www.google.com/s2/favicons?domain=jin10.com&sz=32" width="20" height="20" /> | 金十数据 | `jin10` |
+| <img src="https://www.google.com/s2/favicons?domain=kuaishou.com&sz=32" width="20" height="20" /> | 快手 | `kuaishou` |
+| <img src="https://www.google.com/s2/favicons?domain=linux.do&sz=32" width="20" height="20" /> | Linux.do | `linuxdo` |
+| <img src="https://www.google.com/s2/favicons?domain=lol.qq.com&sz=32" width="20" height="20" /> | 英雄联盟 | `lol` |
+| <img src="https://www.google.com/s2/favicons?domain=miyoushe.com&sz=32" width="20" height="20" /> | 米游社 | `miyoushe` |
+| <img src="https://www.google.com/s2/favicons?domain=163.com&sz=32" width="20" height="20" /> | 网易新闻 | `netease-news` |
+| <img src="https://www.google.com/s2/favicons?domain=ngabbs.com&sz=32" width="20" height="20" /> | NGA | `ngabbs` |
+| <img src="https://www.google.com/s2/favicons?domain=nodeseek.com&sz=32" width="20" height="20" /> | NodeSeek | `nodeseek` |
+| <img src="https://www.google.com/s2/favicons?domain=nytimes.com&sz=32" width="20" height="20" /> | 纽约时报 | `nytimes` |
+| <img src="https://www.google.com/s2/favicons?domain=producthunt.com&sz=32" width="20" height="20" /> | Product Hunt | `producthunt` |
+| <img src="https://www.google.com/s2/favicons?domain=qq.com&sz=32" width="20" height="20" /> | 腾讯新闻 | `qq-news` |
+| <img src="https://www.google.com/s2/favicons?domain=sina.cn&sz=32" width="20" height="20" /> | 新浪网 | `sina` |
+| <img src="https://www.google.com/s2/favicons?domain=sina.cn&sz=32" width="20" height="20" /> | 新浪新闻 | `sina-news` |
+| <img src="https://www.google.com/s2/favicons?domain=smzdm.com&sz=32" width="20" height="20" /> | 什么值得买 | `smzdm` |
+| <img src="https://www.google.com/s2/favicons?domain=sspai.com&sz=32" width="20" height="20" /> | 少数派 | `sspai` |
+| <img src="https://www.google.com/s2/favicons?domain=miyoushe.com&sz=32" width="20" height="20" /> | 崩坏：星穹铁道 | `starrail` |
+| <img src="https://www.google.com/s2/favicons?domain=thepaper.cn&sz=32" width="20" height="20" /> | 澎湃新闻 | `thepaper` |
+| <img src="https://www.google.com/s2/favicons?domain=tieba.baidu.com&sz=32" width="20" height="20" /> | 百度贴吧 | `tieba` |
+| <img src="https://www.google.com/s2/favicons?domain=toutiao.com&sz=32" width="20" height="20" /> | 今日头条 | `toutiao` |
+| <img src="https://www.google.com/s2/favicons?domain=v2ex.com&sz=32" width="20" height="20" /> | V2EX | `v2ex` |
+| <img src="https://www.google.com/s2/favicons?domain=wallstreetcn.com&sz=32" width="20" height="20" /> | 华尔街见闻 | `wallstreet` |
+| <img src="https://www.google.com/s2/favicons?domain=nmc.cn&sz=32" width="20" height="20" /> | 中央气象台 | `weatheralarm` |
+| <img src="https://www.google.com/s2/favicons?domain=weibo.com&sz=32" width="20" height="20" /> | 微博 | `weibo` |
+| <img src="https://www.google.com/s2/favicons?domain=weread.qq.com&sz=32" width="20" height="20" /> | 微信读书 | `weread` |
+| <img src="https://www.google.com/s2/favicons?domain=yicai.com&sz=32" width="20" height="20" /> | 第一财经 | `yicai` |
+| <img src="https://www.google.com/s2/favicons?domain=yystv.cn&sz=32" width="20" height="20" /> | 游研社 | `yystv` |
+
 
 ## 技术栈
 - **框架**: NestJS
@@ -162,9 +227,17 @@ docker run --restart always -p 6688:6688 -d ttkit/daily-hot-api:latest
 | `BACKUP_CRON_EXPRESSION` | 定时备份任务 Cron 表达式 | `0 1 * * *` |
 
 更多配置查看 .env.example
-### TODO，失效接口改造
-nodeseek,nytimes,linuxdo,producthunt
 
+### TODO：失效接口改造
+
+以下数据源接口目前可能失效，待改造修复。完成后可将对应行的 `[ ]` 勾选为 `[x]`。
+
+| 状态 | 图标 | 站点名称 | 数据源 ID |
+|:----:|:----:|----------|-----------|
+| [ ] | <img src="https://www.google.com/s2/favicons?domain=nodeseek.com&sz=32" width="20" height="20" /> | NodeSeek | `nodeseek` |
+| [ ] | <img src="https://www.google.com/s2/favicons?domain=nytimes.com&sz=32" width="20" height="20" /> | 纽约时报 | `nytimes` |
+| [ ] | <img src="https://www.google.com/s2/favicons?domain=linux.do&sz=32" width="20" height="20" /> | Linux.do | `linuxdo` |
+| [ ] | <img src="https://www.google.com/s2/favicons?domain=producthunt.com&sz=32" width="20" height="20" /> | Product Hunt | `producthunt` |
 
 ## 📢 免责声明
 

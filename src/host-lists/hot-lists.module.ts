@@ -1,4 +1,5 @@
 import { Module, Provider } from '@nestjs/common';
+import { HttpModule } from '@nestjs/axios';
 import { DiscoveryModule } from '@nestjs/core';
 import { HotListsController } from './hot-lists.controller';
 import { HotListsService } from './hot-lists.service';
@@ -35,6 +36,7 @@ import { IthomeXijiaYiSource } from './sources/ithome-xijiayi.source';
 import { IthomeSource } from './sources/ithome.source';
 import { JianshuSource } from './sources/jianshu.source';
 import { Jin10Source } from './sources/jin10.source';
+import { KuaishouSource } from './sources/kuaishou.source';
 import { LinuxdoSource } from './sources/linuxdo.source';
 import { LolSource } from './sources/lol.source';
 import { MiyousheSource } from './sources/miyoushe.source';
@@ -67,6 +69,8 @@ import { HupuSource } from './sources/hupu.source';
     DiscoveryModule,
     // 用于网络请求
     HttpClientModule,
+    // 供 Douyin 等源获取原始响应头（如 Set-Cookie）
+    HttpModule.register({ timeout: 8000 }),
     // 用于Token服务（Bilibili WBI签名）
     TokenModule,
     // 用于RSS生成
@@ -107,6 +111,7 @@ import { HupuSource } from './sources/hupu.source';
     IthomeSource,
     JianshuSource,
     Jin10Source,
+    KuaishouSource,
     LinuxdoSource,
     LolSource,
     MiyousheSource,
