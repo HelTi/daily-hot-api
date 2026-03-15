@@ -38,7 +38,7 @@ export class ToutiaoSource implements HotListSource {
       id: v.ClusterIdStr,
       title: v.Title,
       cover: v.Image?.url,
-      timestamp: getTime(v.ClusterIdStr),
+      timestamp: getTime(Date.now()),
       hot: Number(v.HotValue),
       url: `https://www.toutiao.com/trending/${v.ClusterIdStr}/`,
       mobileUrl: `https://api.toutiaoapi.com/feoffline/amos_land/new/html/main/index.html?topic_id=${v.ClusterIdStr}`,
