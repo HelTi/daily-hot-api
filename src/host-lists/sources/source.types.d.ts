@@ -479,4 +479,10 @@ export type RouterType = {
     pubDate?: string;
     author?: string;
   };
+  tonghuashun: {
+    id: string;
+    title: string;
+    desc: string;
+    cover: string;
+  };
 };
