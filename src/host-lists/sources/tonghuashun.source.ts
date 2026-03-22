@@ -25,7 +25,21 @@ export class TonghuashunSource implements HotListSource {
     noCache?: boolean,
   ): Promise<HotListGetListResponse> {
     const url = 'https://www.10jqka.com.cn/';
-    const result = await this.httpService.get<string>({ url, noCache });
+    const result = await this.httpService.get<string>({
+      url,
+      noCache,
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        Referer: 'https://www.10jqka.com.cn/',
+        Accept:
+          'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+        'Accept-Encoding': 'gzip, deflate, br',
+        Connection: 'keep-alive',
+        'Upgrade-Insecure-Requests': '1',
+      },
+    });
     const $ = cheerio.load(result.data);
     // 页面有多个 @container，逐个收集其内新闻链接后合并
     const $containers = $('[class*="@container"]');
