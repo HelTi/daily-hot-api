@@ -64,6 +64,7 @@ import { YystvSource } from './sources/yystv.source';
 import { ZhihuDailySource } from './sources/zhihu-daily.source';
 import { HupuSource } from './sources/hupu.source';
 import { TonghuashunSource } from './sources/tonghuashun.source';
+import { GelonghuiSource } from './sources/gelonghui.source';
 @Module({
   imports: [
     // 用于自动发现源
@@ -140,6 +141,7 @@ import { TonghuashunSource } from './sources/tonghuashun.source';
     ZhihuDailySource,
     HupuSource,
     TonghuashunSource,
+    GelonghuiSource,
   ] as Provider[],
   exports: [HotListsService],
 })
