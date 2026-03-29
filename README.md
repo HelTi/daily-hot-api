@@ -74,6 +74,9 @@
 | <img src="https://www.google.com/s2/favicons?domain=weread.qq.com&sz=32" width="20" height="20" /> | 微信读书 | `weread` |
 | <img src="https://www.google.com/s2/favicons?domain=yicai.com&sz=32" width="20" height="20" /> | 第一财经 | `yicai` |
 | <img src="https://www.google.com/s2/favicons?domain=yystv.cn&sz=32" width="20" height="20" /> | 游研社 | `yystv` |
+| <img src="https://www.google.com/s2/favicons?domain=10jqka.com.cn&sz=32" width="20" height="20" /> | 同花顺财经 | `tonghuashun` |
+| <img src="https://www.google.com/s2/favicons?domain=gelonghui.com&sz=32" width="20" height="20" /> | 格隆汇 | `gelonghui` |
+
 
 
 ## 技术栈
@@ -113,7 +116,7 @@ $ npm run start:prod
 ### 获取热榜列表
 
 ```
-GET /hot-lists/{sourceName}
+GET /hot-lists/{sourceName}?type=1&noCache=false
 ```
 
 支持的数据源：
