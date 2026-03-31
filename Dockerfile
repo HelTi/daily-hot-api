@@ -11,10 +11,11 @@ WORKDIR /app
 ENV npm_config_fund=false \
     npm_config_update_notifier=false
 
-COPY package.json package-lock.json ./
+# 仅 package.json 时通配只匹配一个文件；有 lock 时会一并复制，便于 npm ci
+COPY package*.json ./
 
 RUN --mount=type=cache,target=/root/.npm \
-    npm ci
+    if [ -f package-lock.json ]; then npm ci; else npm install; fi
 
 COPY . .
 
@@ -35,10 +36,10 @@ ENV NODE_ENV=production \
     npm_config_fund=false \
     npm_config_update_notifier=false
 
-COPY package.json package-lock.json ./
+COPY package*.json ./
 
 RUN --mount=type=cache,target=/root/.npm \
-    npm ci --omit=dev --no-audit \
+    if [ -f package-lock.json ]; then npm ci --omit=dev --no-audit; else npm install --omit=dev --no-audit; fi \
     && npm cache clean --force
 
 COPY --from=builder /app/dist ./dist
