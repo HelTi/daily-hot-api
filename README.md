@@ -213,6 +213,26 @@ docker pull ghcr.io/helti/daily-hot-api:latest
 docker run --restart always -p 6688:6688 -d ttkit/daily-hot-api:latest
 ```
 
+启用完整服务：
+```bash
+# 1. 创建网络
+docker network create hot-api-net
+
+# 2. 启动 Redis
+docker run -d --name redis --network hot-api-net redis:7-alpine
+
+# 3. 启动 MongoDB
+docker run -d --name mongodb --network hot-api-net mongo:7.0
+
+# 4. 启动应用，传入环境变量指向上面的服务
+docker run -d --name daily-hot-api \
+  --network hot-api-net \
+  -p 6689:6689 \
+  -e REDIS_HOST=redis \
+  -e REDIS_PORT=6379 \
+  -e MONGODB_URI=mongodb://mongodb:27017/daily-hot-api \
+  ttkit/daily-hot-api:latest
+```
 
 
 ### 环境变量
