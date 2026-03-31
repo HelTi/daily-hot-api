@@ -38,8 +38,8 @@ ENV NODE_ENV=production \
 
 COPY package*.json ./
 
-RUN --mount=type=cache,target=/root/.npm \
-    if [ -f package-lock.json ]; then npm ci --omit=dev --no-audit; else npm install --omit=dev --no-audit; fi \
+# 生产阶段不用 npm 缓存挂载，避免与 npm cache clean 冲突导致非 0 退出码
+RUN if [ -f package-lock.json ]; then npm ci --omit=dev --no-audit; else npm install --omit=dev --no-audit; fi \
     && npm cache clean --force
 
 COPY --from=builder /app/dist ./dist
