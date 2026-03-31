@@ -16,7 +16,8 @@ FROM node:22-alpine AS production
 
 ENV NODE_ENV=production
 
-RUN addgroup -g 1001 -S nodejs && \
+RUN apk upgrade --no-cache && \
+    addgroup -g 1001 -S nodejs && \
     adduser -S nestjs -u 1001 -G nodejs
 
 WORKDIR /app

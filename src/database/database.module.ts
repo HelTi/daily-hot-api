@@ -16,9 +16,12 @@ import { SourceConfigRepository } from './repositories/source-config.repository'
         uri:
           configService.get<string>('MONGODB_URI') ||
           'mongodb://localhost:27017/daily-hot-api',
-        lazyConnection: true, // 延迟连接
-        retryAttempts: 3, // 重试次数
-        retryDelay: 1000, // 重试间隔
+        lazyConnection: true,
+        retryAttempts: 3,
+        retryDelay: 2000,
+        serverSelectionTimeoutMS: 5000,
+        connectTimeoutMS: 5000,
+        socketTimeoutMS: 10000,
         connectionFactory: (connection) => {
           connection.on('error', (error) => {
             console.warn('MongoDB连接错误，但服务继续运行:', error.message);
