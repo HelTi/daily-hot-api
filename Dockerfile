@@ -1,9 +1,7 @@
 # syntax=docker/dockerfile:1
 
-# ---- builder ----
 FROM node:22-alpine AS builder
 
-# 同步 Alpine 安全更新（基础镜像里的 zlib 等 CVE 需从仓库升级）
 RUN apk upgrade --no-cache
 
 WORKDIR /app
@@ -11,18 +9,17 @@ WORKDIR /app
 ENV npm_config_fund=false \
     npm_config_update_notifier=false
 
-# 仅 package.json 时通配只匹配一个文件；有 lock 时会一并复制，便于 npm ci
 COPY package*.json ./
 
 RUN --mount=type=cache,target=/root/.npm \
-    if [ -f package-lock.json ]; then npm ci; else npm install; fi
+    sh -ec 'if [ -f package-lock.json ]; then npm ci; else npm install; fi'
 
 COPY . .
 
-RUN npm run build \
-    && rm -rf node_modules/.cache
+RUN npm run build && rm -rf node_modules/.cache
 
-# ---- production ----
+# ---
+
 FROM node:22-alpine AS production
 
 RUN apk upgrade --no-cache \
@@ -38,9 +35,9 @@ ENV NODE_ENV=production \
 
 COPY package*.json ./
 
-RUN --mount=type=cache,target=/root/.npm \
-    if [ -f package-lock.json ]; then npm ci --omit=dev --no-audit; else npm install --omit=dev --no-audit; fi \
-    && npm cache clean --force
+# 不用 cache mount，避免与清理缓存逻辑冲突；直接删 ~/.npm 减小层体积
+RUN sh -ec 'if [ -f package-lock.json ]; then npm ci --omit=dev --no-audit; else npm install --omit=dev --no-audit; fi' \
+    && rm -rf /root/.npm
 
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/healthcheck.js .
