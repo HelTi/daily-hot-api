@@ -5,6 +5,7 @@ npm-debug.log*
 # 构建输出
 build
 data
+dist
 
 # 开发工具
 .vscode
