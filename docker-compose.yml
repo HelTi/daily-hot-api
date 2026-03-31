@@ -7,8 +7,6 @@ services:
       - "6689:6689"
     environment:
       - NODE_ENV=production
-      # punycode 弃用仅屏蔽 DEP0040；Mongo 驱动后台选主失败时不致直接退出进程
-      - NODE_OPTIONS=--disable-warning=DEP0040 --unhandled-rejections=warn
       - PORT=6689
       - REDIS_HOST=redis
       - REDIS_PORT=6379
@@ -17,10 +15,8 @@ services:
       - SCHEDULER_AUTO_START=false
       - SCHEDULER_CRON_EXPRESSION=0 */12 * * *
     depends_on:
-      redis:
-        condition: service_healthy
-      mongodb:
-        condition: service_healthy
+      - redis
+      - mongodb
     restart: unless-stopped
     networks:
       - app-network
@@ -34,12 +30,6 @@ services:
       - redis_data:/data
       - ./redis.conf:/usr/local/etc/redis/redis.conf
     command: redis-server /usr/local/etc/redis/redis.conf
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-      start_period: 5s
     restart: unless-stopped
     networks:
       - app-network
@@ -51,12 +41,6 @@ services:
       - "27017:27017"
     volumes:
       - mongodb_data:/data/db
-    healthcheck:
-      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand({ ping: 1 })"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-      start_period: 15s
     restart: unless-stopped
     networks:
       - app-network
@@ -68,3 +52,4 @@ volumes:
 networks:
   app-network:
     driver: bridge
+  

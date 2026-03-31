@@ -1,50 +1,33 @@
-# syntax=docker/dockerfile:1
-
+# ---- Builder ----
 FROM node:22-alpine AS builder
-
-RUN apk upgrade --no-cache
 
 WORKDIR /app
 
-ENV npm_config_fund=false \
-    npm_config_update_notifier=false
-
 COPY package*.json ./
 
-RUN --mount=type=cache,target=/root/.npm \
-    sh -ec 'if [ -f package-lock.json ]; then npm ci; else npm install; fi'
+RUN npm ci
 
 COPY . .
 
-RUN npm run build && rm -rf node_modules/.cache
+RUN npm run build
 
-# ---
-
+# ---- Production ----
 FROM node:22-alpine AS production
 
-RUN apk upgrade --no-cache \
-    && addgroup -g 1001 -S nodejs \
-    && adduser -S nestjs -u 1001 -G nodejs
+ENV NODE_ENV=production
+
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nestjs -u 1001 -G nodejs
 
 WORKDIR /app
 
-ENV NODE_ENV=production \
-    PORT=6689 \
-    npm_config_fund=false \
-    npm_config_update_notifier=false
+COPY --chown=nestjs:nodejs package*.json ./
 
-COPY package*.json ./
+RUN npm ci --omit=dev --no-audit && npm cache clean --force
 
-# 不用 cache mount，避免与清理缓存逻辑冲突；直接删 ~/.npm 减小层体积
-RUN sh -ec 'if [ -f package-lock.json ]; then npm ci --omit=dev --no-audit; else npm install --omit=dev --no-audit; fi' \
-    && rm -rf /root/.npm
-
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/healthcheck.js .
-COPY --from=builder /app/views ./views
-
-RUN find /app/dist -name '*.map' -delete \
-    && chown -R nestjs:nodejs /app
+COPY --chown=nestjs:nodejs --from=builder /app/dist ./dist
+COPY --chown=nestjs:nodejs --from=builder /app/healthcheck.js .
+COPY --chown=nestjs:nodejs --from=builder /app/views ./views
 
 USER nestjs
 
