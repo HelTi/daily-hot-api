@@ -15,13 +15,14 @@ export class HotListsController {
 
   @Get('all')
   getAllSources() {
-    const sources = this.hotListsService.getAllSources();
+    const sources = this.hotListsService.getAllSourcesWithMetadata();
     return {
       code: 200,
       count: sources.length,
-      routes: sources.map((source) => ({
-        name: source,
-        path: `/${source}`,
+      routes: sources.map(({ name, title }) => ({
+        name,
+        title,
+        path: `/${name}`,
       })),
     };
   }
