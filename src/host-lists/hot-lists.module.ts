@@ -60,6 +60,7 @@ import { WeatheralarmSource } from './sources/weatheralarm.source';
 import { WeiboSource } from './sources/weibo.source';
 import { WereadSource } from './sources/weread.source';
 import { YicaiSource } from './sources/yicai.source';
+import { XinyuSource } from './sources/xinyu.source';
 import { YystvSource } from './sources/yystv.source';
 import { ZhihuDailySource } from './sources/zhihu-daily.source';
 import { HupuSource } from './sources/hupu.source';
@@ -137,6 +138,7 @@ import { GelonghuiSource } from './sources/gelonghui.source';
     WeiboSource,
     WereadSource,
     YicaiSource,
+    XinyuSource,
     YystvSource,
     ZhihuDailySource,
     HupuSource,
