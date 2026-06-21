@@ -1,13 +1,13 @@
 export interface HotListItem {
   id: string | number;
-  title: string;
-  desc?: string;
-  cover?: string;
-  author?: string;
-  hot?: number | string;
-  timestamp?: number;
-  url: string;
-  mobileUrl: string;
+  title: string; // 标题
+  desc?: string; // 描述
+  cover?: string; // 封面
+  author?: string; // 作者
+  hot?: number | string; // 热度
+  timestamp?: number; // 时间戳
+  url: string; // 链接
+  mobileUrl: string; // 移动端链接
 }
 
 // 获取热榜列表的响应数据

@@ -75,6 +75,19 @@ export class HotListsService implements OnModuleInit {
   }
 
   /**
+   * 获取所有热榜源的名称与 @HotSource 元数据（用于列表接口）
+   */
+  getAllSourcesWithMetadata(): Array<{
+    name: string;
+    title: string;
+  }> {
+    return Array.from(this.sources.keys()).map((name) => ({
+      name,
+      title: this.sourceMetadata.get(name)?.title ?? name,
+    }));
+  }
+
+  /**
    * 获取特定热榜的数据
    * @param sourceName 热榜源名称
    * @param noCache 是否跳过缓存
