@@ -39,8 +39,19 @@ export class DailyBriefService {
         briefDate,
         period,
       );
-      if (existing?.status === 'success') {
-        return existing;
+      if (existing) {
+        if (existing.status === 'success') {
+          return existing;
+        }
+        if (existing.status === 'generating') {
+          throw new BadRequestException(
+            'A daily brief is already being generated for date ' +
+              briefDate +
+              ' and period ' +
+              period +
+              '.',
+          );
+        }
       }
     }
 
@@ -253,6 +264,11 @@ export class DailyBriefService {
           startTime,
           endTime,
         );
+
+        if (!Array.isArray(items)) {
+          return [];
+        }
+
         return items.slice(0, topItemsPerSource).map((item) => ({
           source,
           title: item.title,
@@ -288,7 +304,11 @@ export class DailyBriefService {
     }
 
     return merged
-      .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+      .sort((a, b) => {
+        const tA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+        const tB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+        return tB - tA;
+      })
       .slice(0, maxItems);
   }
 

@@ -49,7 +49,9 @@ export class DailyBriefRepository {
   }
 
   async list(options: DailyBriefListOptions = {}) {
-    const { page = 1, limit = 20, status, period, includeDebug } = options;
+    const page = Math.max(1, options.page || 1);
+    const limit = Math.min(100, Math.max(1, options.limit || 20));
+    const { status, period, includeDebug } = options;
     const query: Record<string, unknown> = {};
 
     if (status) {
