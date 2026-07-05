@@ -20,4 +20,18 @@ export default (): ConfigType => ({
   SCHEDULER_CRON_EXPRESSION:
     process.env.SCHEDULER_CRON_EXPRESSION || '0 */12 * * *',
   BACKUP_CRON_EXPRESSION: process.env.BACKUP_CRON_EXPRESSION || '0 1 * * *',
+  // 每日简报配置
+  BRIEF_ENABLED: process.env.BRIEF_ENABLED === 'true',
+  BRIEF_CRON_EXPRESSION: process.env.BRIEF_CRON_EXPRESSION || '0 12 * * *',
+  BRIEF_TIMEZONE: process.env.BRIEF_TIMEZONE || 'Asia/Shanghai',
+  BRIEF_SOURCES: process.env.BRIEF_SOURCES || 'cls,eastmoney,gelonghui',
+  BRIEF_LOOKBACK_HOURS: parseInt(process.env.BRIEF_LOOKBACK_HOURS) || 24,
+  BRIEF_TOP_ITEMS_PER_SOURCE:
+    parseInt(process.env.BRIEF_TOP_ITEMS_PER_SOURCE) || 10,
+  BRIEF_MAX_TOPICS: parseInt(process.env.BRIEF_MAX_TOPICS) || 12,
+  OPENAI_API_KEY: process.env.OPENAI_API_KEY || '',
+  OPENAI_API_BASE_URL: process.env.OPENAI_API_BASE_URL || '',
+  AI_MODEL: process.env.AI_MODEL || 'deepseek-v4-flash',
+  TAVILY_API_KEY: process.env.TAVILY_API_KEY || '',
+  TAVILY_MAX_RESULTS: parseInt(process.env.TAVILY_MAX_RESULTS) || 5,
 });
