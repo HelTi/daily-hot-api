@@ -1,7 +1,6 @@
 # daily-hot-api
 
-一个基于 NestJS 的每日热榜聚合 API 服务，支持多个平台的热榜数据获取，支持手动部署，pm2部署、docker部署，支持定时保存热点数据与备份数据，支持查询历史热点数据。
-
+一个基于 NestJS 的每日热榜聚合 API 服务，支持多个平台的热榜数据获取，支持手动部署，pm2部署、docker部署，支持定时保存热点数据与备份数据，支持查询历史热点数据，支持AI分析数据生成深度简报。
 
 
 ## 功能特性
@@ -12,6 +11,7 @@
 - ⏰ 定时自动抓取热点数据，历史数据定时备份
 - 🔍 支持全文搜索和高级查询
 - 🎯 基于 URL 的数据去重机制
+- 🤖 AI分析数据生成深度简报
 
 ## 支持的站点
 
@@ -151,7 +151,7 @@ GET /api/scheduler/status
 POST /api/scheduler/trigger
 ```
 
-详细的历史功能使用说明请参考：[HISTORY_FEATURE.md](./HISTORY_FEATURE.md)、[DYNAMIC_SCHEDULER.md](./DYNAMIC_SCHEDULER.md)
+详细的历史功能使用说明请参考：[HISTORY_FEATURE.md](./docs/HISTORY_FEATURE.md)、[DYNAMIC_SCHEDULER.md](./docs/DYNAMIC_SCHEDULER.md)
 
 ## 开发指南
 
