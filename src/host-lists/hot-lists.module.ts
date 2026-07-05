@@ -23,6 +23,7 @@ import { DgtleSource } from './sources/dgtle.source';
 import { DoubanGroupSource } from './sources/douban-group.source';
 import { DoubanMovieSource } from './sources/douban-movie.source';
 import { DouyinSource } from './sources/douyin';
+import { EastmoneySource } from './sources/eastmoney.source';
 import { GeekparkSource } from './sources/geekpark.source';
 import { GuokrSource } from './sources/guokr.source';
 import { HackerNewsSource } from './sources/hackernews.source';
@@ -101,6 +102,7 @@ import { GelonghuiSource } from './sources/gelonghui.source';
     DoubanGroupSource,
     DoubanMovieSource,
     DouyinSource,
+    EastmoneySource,
     GeekparkSource,
     GuokrSource,
     HackerNewsSource,
