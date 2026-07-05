@@ -9,7 +9,7 @@ import { DailyBriefScheduler } from './daily-brief.scheduler';
 import { DailyBriefService } from './daily-brief.service';
 
 @Module({
-  imports: [ScheduleModule.forRoot(), DatabaseModule, HotListsModule],
+  imports: [ScheduleModule, DatabaseModule, HotListsModule],
   controllers: [DailyBriefController],
   providers: [
     DailyBriefService,
