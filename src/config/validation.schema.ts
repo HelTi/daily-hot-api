@@ -28,6 +28,24 @@ export const configValidationSchema = z.object({
   ),
   SCHEDULER_CRON_EXPRESSION: z.string().default('0 */12 * * *'),
   BACKUP_CRON_EXPRESSION: z.string().default('0 1 * * *'),
+  // 每日简报配置
+  BRIEF_ENABLED: z.preprocess(
+    (val) => val === 'true',
+    z.boolean().default(false),
+  ),
+  BRIEF_CRON_EXPRESSION: z.string().default('0 12 * * *'),
+  BRIEF_TIMEZONE: z.string().default('Asia/Shanghai'),
+  BRIEF_SOURCES: z
+    .string()
+    .default('cls,yicai,wallstreet,jin10,tonghuashun,eastmoney,gelonghui'),
+  BRIEF_LOOKBACK_HOURS: z.coerce.number().default(24),
+  BRIEF_TOP_ITEMS_PER_SOURCE: z.coerce.number().default(10),
+  BRIEF_MAX_TOPICS: z.coerce.number().default(12),
+  OPENAI_API_KEY: z.string().default(''),
+  OPENAI_API_BASE_URL: z.string().default(''),
+  AI_MODEL: z.string().default('deepseek-v4-flash'),
+  TAVILY_API_KEY: z.string().default(''),
+  TAVILY_MAX_RESULTS: z.coerce.number().default(5),
 });
 
 export type ConfigType = z.infer<typeof configValidationSchema>;
