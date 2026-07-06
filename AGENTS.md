@@ -32,6 +32,7 @@ src/
   token/                  Token/signature helpers for selected sources
 
 docs/
+  *.md                    Feature notes and maintenance context for future AI agents
   daily-brief.md          Daily brief backend/API documentation
   daily-brief-frontend.md Daily brief frontend display guidance
 ```
@@ -203,6 +204,18 @@ Use these docs when working on or discussing frontend integration:
 
 Frontend should not request `includeDebug=true` in normal user flows.
 
+## Feature Documentation
+
+When adding a new feature, update or create documentation under `docs/` in the same change. The documentation should make future AI maintenance and extension easier by recording:
+
+- What the feature does and the user-facing/API behavior.
+- Key files, modules, services, schemas, and repositories involved.
+- Configuration or environment variables, including defaults.
+- Data flow, scheduler behavior, external APIs, or persistence details when relevant.
+- Verification steps, curl examples, and safe no-op checks for destructive routes.
+
+If the feature changes an existing documented area, update the existing doc instead of creating a duplicate. If no suitable doc exists, create a focused `docs/<feature-name>.md`.
+
 ## Verification Checklist
 
 For source changes:
@@ -233,8 +246,7 @@ Expected result should include `deletedCount: 0`.
 
 - Keep changes scoped to the requested module.
 - Use the existing NestJS module/service/controller/repository pattern.
-- Update docs when changing API behavior.
+- Update docs when changing API behavior or adding features.
 - Update `.env.example` when adding or changing environment variables.
 - Avoid returning large debug fields to frontend-facing APIs by default.
 - Preserve user changes in a dirty worktree; do not revert unrelated edits.
-
