@@ -1,11 +1,64 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
+import { z } from 'zod';
 import {
   BriefAnalysis,
   BriefInputItem,
   BriefSearchEvidence,
 } from '../interfaces/daily-brief.interface';
+
+const stringArraySchema = z.array(z.string()).catch([]);
+
+const briefTopicSchema = z
+  .object({
+    title: z.string().catch(''),
+    event: z.string().catch(''),
+    importance: z.string().catch(''),
+    impactDirection: z.enum(['利好', '利空', '中性', '待验证']).catch('待验证'),
+    impactHorizon: z.enum(['短期', '中期', '长期']).catch('中期'),
+    confidence: z.coerce.number().min(0).max(1).catch(0.5),
+    industryChain: z
+      .object({
+        upstream: stringArraySchema,
+        midstream: stringArraySchema,
+        downstream: stringArraySchema,
+        bottlenecks: stringArraySchema,
+      })
+      .catch({
+        upstream: [],
+        midstream: [],
+        downstream: [],
+        bottlenecks: [],
+      }),
+    aShareMapping: z
+      .array(
+        z.object({
+          company: z.string().catch('待验证'),
+          code: z.string().optional().catch(undefined),
+          logic: z.string().catch(''),
+          relationType: z
+            .enum(['直接受益', '间接受益', '题材映射', '承压', '待验证'])
+            .catch('待验证'),
+        }),
+      )
+      .catch([]),
+    risks: stringArraySchema,
+    followUpSignals: stringArraySchema,
+    sourceUrls: stringArraySchema,
+  })
+  .strip();
+
+const briefAnalysisSchema = z
+  .object({
+    summary: z.string().catch(''),
+    highlights: stringArraySchema,
+    topics: z.array(briefTopicSchema).catch([]),
+    risks: stringArraySchema,
+    followUpSignals: stringArraySchema,
+    markdown: z.string().catch(''),
+  })
+  .strip();
 
 @Injectable()
 export class AiAnalysisClient {
@@ -60,9 +113,7 @@ export class AiAnalysisClient {
       throw new Error('AI returned empty content');
     }
 
-    return this.normalizeAnalysis(
-      JSON.parse(content) as Partial<BriefAnalysis>,
-    );
+    return this.parseAnalysis(content);
   }
 
   getModel(): string {
@@ -109,16 +160,25 @@ export class AiAnalysisClient {
     };
   }
 
-  private normalizeAnalysis(analysis: Partial<BriefAnalysis>): BriefAnalysis {
-    return {
-      summary: analysis.summary || '',
-      highlights: Array.isArray(analysis.highlights) ? analysis.highlights : [],
-      topics: Array.isArray(analysis.topics) ? analysis.topics : [],
-      risks: Array.isArray(analysis.risks) ? analysis.risks : [],
-      followUpSignals: Array.isArray(analysis.followUpSignals)
-        ? analysis.followUpSignals
-        : [],
-      markdown: analysis.markdown || '',
-    };
+  private parseAnalysis(content: string): BriefAnalysis {
+    let parsedContent: unknown;
+    try {
+      parsedContent = JSON.parse(content);
+    } catch (error) {
+      throw new Error(
+        `AI returned invalid JSON: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+
+    const result = briefAnalysisSchema.safeParse(parsedContent);
+    if (!result.success) {
+      throw new Error(
+        `AI returned invalid brief analysis structure: ${result.error.message}`,
+      );
+    }
+
+    return result.data as BriefAnalysis;
   }
 }
