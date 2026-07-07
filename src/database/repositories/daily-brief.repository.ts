@@ -72,8 +72,24 @@ export class DailyBriefRepository {
       this.dailyBriefModel.countDocuments(query),
     ]);
 
+    // 返回的数据处理
+    const resData = data.map((item) => {
+      const topics = item.analysis?.topics;
+
+      return {
+        status: item.status,
+        briefDate: item.briefDate,
+        period: item.period,
+        analysis: {
+          summary: item.analysis?.summary,
+        },
+        topicCount: Array.isArray(topics) ? topics.length : undefined,
+        updatedAt: item.updatedAt,
+      };
+    });
+
     return {
-      data,
+      data: resData,
       total,
       page,
       limit,
