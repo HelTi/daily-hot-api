@@ -15,6 +15,9 @@
 
 ## 支持的站点
 
+<details>
+<summary>查看全部站点</summary>
+
 | 图标 | 站点名称 | 数据源 ID |
 |:----:|----------|-----------|
 | <img src="https://www.google.com/s2/favicons?domain=zhihu.com&sz=32" width="20" height="20" /> | 知乎 | `zhihu` |
@@ -76,6 +79,8 @@
 | <img src="https://www.google.com/s2/favicons?domain=yystv.cn&sz=32" width="20" height="20" /> | 游研社 | `yystv` |
 | <img src="https://www.google.com/s2/favicons?domain=10jqka.com.cn&sz=32" width="20" height="20" /> | 同花顺财经 | `tonghuashun` |
 | <img src="https://www.google.com/s2/favicons?domain=gelonghui.com&sz=32" width="20" height="20" /> | 格隆汇 | `gelonghui` |
+
+</details>
 
 
 
