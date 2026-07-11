@@ -23,6 +23,7 @@ import { DgtleSource } from './sources/dgtle.source';
 import { DoubanGroupSource } from './sources/douban-group.source';
 import { DoubanMovieSource } from './sources/douban-movie.source';
 import { DouyinSource } from './sources/douyin';
+import { EastmoneyStockSource } from './sources/eastmoney-stock.source';
 import { EastmoneySource } from './sources/eastmoney.source';
 import { GeekparkSource } from './sources/geekpark.source';
 import { GuokrSource } from './sources/guokr.source';
@@ -36,6 +37,7 @@ import { IfanrSource } from './sources/ifanr.source';
 import { IthomeXijiaYiSource } from './sources/ithome-xijiayi.source';
 import { IthomeSource } from './sources/ithome.source';
 import { JianshuSource } from './sources/jianshu.source';
+import { JdSource } from './sources/jd.source';
 import { Jin10Source } from './sources/jin10.source';
 import { KuaishouSource } from './sources/kuaishou.source';
 import { LinuxdoSource } from './sources/linuxdo.source';
@@ -52,6 +54,7 @@ import { SinaSource } from './sources/sina.source';
 import { SmzdmSource } from './sources/smzdm.source';
 import { SsPaiSource } from './sources/sspai.source';
 import { StarrailSource } from './sources/starrail.source';
+import { TaobaoSource } from './sources/taobao.source';
 import { ThepaperSource } from './sources/thepaper.source';
 import { TiebaSource } from './sources/tieba.source';
 import { ToutiaoSource } from './sources/toutiao.source';
@@ -102,6 +105,7 @@ import { GelonghuiSource } from './sources/gelonghui.source';
     DoubanGroupSource,
     DoubanMovieSource,
     DouyinSource,
+    EastmoneyStockSource,
     EastmoneySource,
     GeekparkSource,
     GuokrSource,
@@ -115,6 +119,7 @@ import { GelonghuiSource } from './sources/gelonghui.source';
     IthomeXijiaYiSource,
     IthomeSource,
     JianshuSource,
+    JdSource,
     Jin10Source,
     KuaishouSource,
     LinuxdoSource,
@@ -131,6 +136,7 @@ import { GelonghuiSource } from './sources/gelonghui.source';
     SmzdmSource,
     SsPaiSource,
     StarrailSource,
+    TaobaoSource,
     ThepaperSource,
     TiebaSource,
     ToutiaoSource,
