@@ -2,6 +2,8 @@
 
 一个基于 NestJS 的每日热榜聚合 API 服务，支持多个平台的热榜数据获取，支持手动部署，pm2部署、docker部署，支持定时保存热点数据与备份数据，支持查询历史热点数据，支持AI分析数据生成深度简报。
 
+📖 [在线文档](https://helti.github.io/daily-hot-api/) · [快速开始](./docs/guide/getting-started.md) · [API 参考](./docs/reference/api.md) · [开发指南](./docs/development/architecture.md)
+
 
 ## 功能特性
 
@@ -156,7 +158,7 @@ GET /api/scheduler/status
 POST /api/scheduler/trigger
 ```
 
-详细的历史功能使用说明请参考：[HISTORY_FEATURE.md](./docs/HISTORY_FEATURE.md)、[DYNAMIC_SCHEDULER.md](./docs/DYNAMIC_SCHEDULER.md)
+详细说明请参考：[历史热点](./docs/guide/history.md)、[定时任务](./docs/guide/scheduler.md)
 
 ## 开发指南
 

@@ -10,7 +10,7 @@
 
 ```bash
 # 定时任务开关
-SCHEDULER_AUTO_START=true
+SCHEDULER_AUTO_START=false
 
 # 定时任务执行时间（cron 表达式）
 SCHEDULER_CRON_EXPRESSION=0 */12 * * *
@@ -20,7 +20,7 @@ SCHEDULER_CRON_EXPRESSION=0 */12 * * *
 
 ### SCHEDULER_AUTO_START
 - **类型**: boolean
-- **默认值**: true
+- **仓库示例值**: `false`
 - **说明**: 控制是否在应用启动时自动启动定时任务
 - **可选值**: 
   - `true`: 自动启动定时任务
@@ -35,7 +35,7 @@ SCHEDULER_CRON_EXPRESSION=0 */12 * * *
 
 ### 小时级别
 ```bash
-# 每12小时执行一次（默认）
+# 每12小时执行一次
 SCHEDULER_CRON_EXPRESSION=0 */12 * * *
 
 # 每6小时执行一次

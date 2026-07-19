@@ -130,7 +130,7 @@ PUT /api/scheduler/config/{source}
 ### 数据源过滤
 - 支持通过 `IGNORE_SAVE_SOURCES` 环境变量配置忽略的数据源
 - 被忽略的数据源不会被保存到数据库，但仍可通过API获取实时数据
-- 支持动态配置，无需重启服务
+- 修改环境变量后重启服务即可调整过滤列表
 
 ### 时间戳处理
 - 如果热点数据包含 `timestamp`，直接使用
@@ -192,7 +192,7 @@ curl http://localhost:6688/api/history/stats
 ### 环境变量
 - `MONGODB_URI`: MongoDB 连接字符串
 - `IGNORE_SAVE_SOURCES`: 忽略保存的数据源，用逗号分隔（如：`v2ex,github,hostloc`）
-- `SCHEDULER_AUTO_START`: 定时任务自动启动配置（`true`/`false`），默认为 `true`
+- `SCHEDULER_AUTO_START`: 定时任务自动启动配置（`true`/`false`），仓库示例值为 `false`
 
 ### 默认配置
 - 定时任务检查间隔：每分钟
@@ -204,6 +204,6 @@ curl http://localhost:6688/api/history/stats
 
 1. 确保 MongoDB 服务已启动并可连接
 2. 首次启动时会自动初始化数据源配置
-3. 定时任务会在服务启动后自动开始运行
+3. 只有 `SCHEDULER_AUTO_START=true` 时，定时任务才会在服务启动后自动运行
 4. 历史数据永久保存，不会自动删除
 5. 建议定期监控数据库大小和性能
