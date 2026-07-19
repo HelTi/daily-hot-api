@@ -168,7 +168,7 @@ export class DailyBriefRepository {
       },
       { $unwind: '$mappings' },
       {
-        $set: {
+        $addFields: {
           company: {
             $trim: {
               input: {
@@ -183,28 +183,33 @@ export class DailyBriefRepository {
           },
           code: {
             $toUpper: {
-              $replaceAll: {
+              $reduce: {
                 input: {
-                  $trim: {
-                    input: {
-                      $convert: {
-                        input: '$mappings.code',
-                        to: 'string',
-                        onError: '',
-                        onNull: '',
+                  $split: [
+                    {
+                      $trim: {
+                        input: {
+                          $convert: {
+                            input: '$mappings.code',
+                            to: 'string',
+                            onError: '',
+                            onNull: '',
+                          },
+                        },
                       },
                     },
-                  },
+                    ' ',
+                  ],
                 },
-                find: ' ',
-                replacement: '',
+                initialValue: '',
+                in: { $concat: ['$$value', '$$this'] },
               },
             },
           },
         },
       },
       {
-        $set: {
+        $addFields: {
           identity: {
             $cond: [
               {
@@ -266,7 +271,7 @@ export class DailyBriefRepository {
             rankings: [
               ...groupedStocks,
               {
-                $set: {
+                $addFields: {
                   briefCount: { $size: '$briefIds' },
                 },
               },
