@@ -24,7 +24,7 @@ https://www.jd.com/
 ## API
 
 ```bash
-curl http://localhost:6688/api/hot-lists/jd
+curl http://localhost:6688/hot-lists/jd
 ```
 
 返回条目的 `url` 指向京东官方排行榜/推荐页面，`mobileUrl` 指向对应标题的京东移动端销量排序搜索页。
@@ -39,5 +39,5 @@ npx eslint "src/**/*.ts"
 运行服务后可验证：
 
 ```bash
-curl http://localhost:6688/api/hot-lists/jd
+curl http://localhost:6688/hot-lists/jd
 ```
