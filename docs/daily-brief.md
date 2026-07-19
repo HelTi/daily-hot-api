@@ -228,6 +228,8 @@ curl 'http://localhost:6688/api/briefs/statistics/stocks?period=daily&startDate=
 
 接口按完整查询条件缓存结果，默认缓存 12 小时。缓存复用现有缓存模块（Redis 不可用时降级为进程内存缓存）；成功生成简报或实际删除简报后，会清理股票排名缓存。
 
+股票排名聚合兼容 MongoDB 4.0：使用 `$addFields` 和 `$reduce`/`$split` 处理股票代码，不依赖 MongoDB 4.2/4.4 才提供的 `$set` 聚合阶段和 `$replaceAll` 表达式。
+
 查询参数：
 
 | 参数 | 类型 | 默认值 | 说明 |

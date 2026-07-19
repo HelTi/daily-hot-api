@@ -44,6 +44,11 @@ describe('DailyBriefRepository stock ranking', () => {
         briefDate: { $gte: '2026-07-01', $lte: '2026-07-31' },
       },
     });
+    const serializedPipeline = JSON.stringify(pipeline);
+    expect(serializedPipeline).not.toContain('"$replaceAll"');
+    expect(serializedPipeline).not.toContain('"$set"');
+    expect(serializedPipeline).toContain('"$addFields"');
+    expect(serializedPipeline).toContain('"$reduce"');
     expect(result).toEqual({
       totalBriefs: 3,
       uniqueStocks: 1,
