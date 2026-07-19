@@ -1,6 +1,10 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { DailyBriefRepository } from '../database/repositories/daily-brief.repository';
+import { CacheData, CacheService } from '../cache/cache.service';
+import {
+  DailyBriefRepository,
+  StockRankingItem,
+} from '../database/repositories/daily-brief.repository';
 import { HotItemRepository } from '../database/repositories/hot-item.repository';
 import { HotListsService } from '../host-lists/hot-lists.service';
 import { AiAnalysisClient } from './clients/ai-analysis.client';
@@ -11,6 +15,24 @@ import {
   GenerateBriefOptions,
 } from './interfaces/daily-brief.interface';
 import { StockRankingQueryDto } from './dto/stock-ranking-query.dto';
+
+const STOCK_RANKING_CACHE_PREFIX = 'daily-brief:statistics:stocks:';
+const DEFAULT_STOCK_RANKING_CACHE_TTL = 12 * 60 * 60;
+
+export interface StockRankingResponse {
+  filters: {
+    period: string | null;
+    startDate: string | null;
+    endDate: string | null;
+    limit: number;
+  };
+  summary: {
+    briefCount: number;
+    uniqueStockCount: number;
+    totalAppearances: number;
+  };
+  rankings: Array<StockRankingItem & { rank: number }>;
+}
 
 @Injectable()
 export class DailyBriefService {
@@ -23,6 +45,7 @@ export class DailyBriefService {
     private readonly hotListsService: HotListsService,
     private readonly aiAnalysisClient: AiAnalysisClient,
     private readonly tavilySearchClient: TavilySearchClient,
+    private readonly cacheService: CacheService,
   ) {}
 
   async generateBrief(options: GenerateBriefOptions = {}) {
@@ -103,11 +126,13 @@ export class DailyBriefService {
           tavilyUsed: searchEvidence.some((item) => item.results.length > 0),
         },
       );
+      await this.invalidateStockRankingCache();
 
       return this.toPublicBrief(brief);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       await this.dailyBriefRepository.markFailed(briefDate, period, message);
+      await this.invalidateStockRankingCache();
       throw error;
     }
   }
@@ -141,18 +166,27 @@ export class DailyBriefService {
       );
     }
 
-    const limit = options.limit || 50;
+    const filters = {
+      period: options.period || null,
+      startDate: options.startDate || null,
+      endDate: options.endDate || null,
+      limit: options.limit || 50,
+    };
+    const cacheKey = `${STOCK_RANKING_CACHE_PREFIX}${JSON.stringify(filters)}`;
+    const cached =
+      await this.cacheService.get<CacheData<StockRankingResponse>>(cacheKey);
+    if (cached) {
+      return cached.data;
+    }
+
     const result = await this.dailyBriefRepository.getStockRanking({
-      ...options,
-      limit,
+      ...(filters.period ? { period: filters.period } : {}),
+      ...(filters.startDate ? { startDate: filters.startDate } : {}),
+      ...(filters.endDate ? { endDate: filters.endDate } : {}),
+      limit: filters.limit,
     });
-    return {
-      filters: {
-        period: options.period || null,
-        startDate: options.startDate || null,
-        endDate: options.endDate || null,
-        limit,
-      },
+    const response: StockRankingResponse = {
+      filters,
       summary: {
         briefCount: result.totalBriefs,
         uniqueStockCount: result.uniqueStocks,
@@ -163,11 +197,27 @@ export class DailyBriefService {
         ...item,
       })),
     };
+    const configuredTtl = this.configService.get<number>(
+      'BRIEF_STOCK_RANKING_CACHE_TTL',
+      DEFAULT_STOCK_RANKING_CACHE_TTL,
+    );
+    const ttl =
+      configuredTtl > 0 ? configuredTtl : DEFAULT_STOCK_RANKING_CACHE_TTL;
+    await this.cacheService.set(
+      cacheKey,
+      { data: response, updateTime: new Date().toISOString() },
+      ttl,
+    );
+
+    return response;
   }
 
   async deleteByDate(date: string, period?: string) {
     this.validateBriefDate(date);
     const result = await this.dailyBriefRepository.deleteByDate(date, period);
+    if ((result.deletedCount || 0) > 0) {
+      await this.invalidateStockRankingCache();
+    }
 
     return {
       mode: 'date',
@@ -196,6 +246,9 @@ export class DailyBriefService {
       beforeDate,
       options.period,
     );
+    if ((result.deletedCount || 0) > 0) {
+      await this.invalidateStockRankingCache();
+    }
 
     return {
       mode: options.beforeDate ? 'beforeDate' : 'olderThan',
@@ -224,11 +277,19 @@ export class DailyBriefService {
         10,
       ),
       maxTopics: this.configService.get<number>('BRIEF_MAX_TOPICS', 12),
+      stockRankingCacheTtl: this.configService.get<number>(
+        'BRIEF_STOCK_RANKING_CACHE_TTL',
+        DEFAULT_STOCK_RANKING_CACHE_TTL,
+      ),
       model: this.aiAnalysisClient.getModel(),
       tavilyConfigured: Boolean(
         this.configService.get<string>('TAVILY_API_KEY'),
       ),
     };
+  }
+
+  private invalidateStockRankingCache() {
+    return this.cacheService.delByPattern(STOCK_RANKING_CACHE_PREFIX);
   }
 
   private toPublicBrief<T extends Record<string, unknown> | null>(brief: T): T {

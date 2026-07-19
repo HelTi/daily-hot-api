@@ -49,6 +49,8 @@ GET /api/briefs/statistics/stocks?period=daily&limit=20
 
 接口返回历史成功简报中 A 股映射的出现次数排名。前端可使用：
 
+服务端按完整查询条件缓存该接口，默认有效期为 12 小时；简报数据发生写入或删除时会自动失效缓存，前端无需额外处理。
+
 - `rank`：名次
 - `company` / `code`：股票展示信息
 - `appearanceCount`：在主题映射中的累计出现次数
