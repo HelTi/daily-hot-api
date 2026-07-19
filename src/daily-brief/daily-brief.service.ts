@@ -10,6 +10,7 @@ import {
   BriefSearchEvidence,
   GenerateBriefOptions,
 } from './interfaces/daily-brief.interface';
+import { StockRankingQueryDto } from './dto/stock-ranking-query.dto';
 
 @Injectable()
 export class DailyBriefService {
@@ -127,6 +128,41 @@ export class DailyBriefService {
     includeDebug?: boolean;
   }) {
     return this.dailyBriefRepository.list(options);
+  }
+
+  async getStockRanking(options: StockRankingQueryDto) {
+    if (
+      options.startDate &&
+      options.endDate &&
+      options.startDate > options.endDate
+    ) {
+      throw new BadRequestException(
+        'startDate must be earlier than or equal to endDate',
+      );
+    }
+
+    const limit = options.limit || 50;
+    const result = await this.dailyBriefRepository.getStockRanking({
+      ...options,
+      limit,
+    });
+    return {
+      filters: {
+        period: options.period || null,
+        startDate: options.startDate || null,
+        endDate: options.endDate || null,
+        limit,
+      },
+      summary: {
+        briefCount: result.totalBriefs,
+        uniqueStockCount: result.uniqueStocks,
+        totalAppearances: result.totalAppearances,
+      },
+      rankings: result.rankings.map((item, index) => ({
+        rank: index + 1,
+        ...item,
+      })),
+    };
   }
 
   async deleteByDate(date: string, period?: string) {

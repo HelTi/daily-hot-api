@@ -11,6 +11,7 @@ import {
 import { DailyBriefService } from './daily-brief.service';
 import { DailyBriefScheduler } from './daily-brief.scheduler';
 import { GenerateBriefDto } from './dto/generate-brief.dto';
+import { StockRankingQueryDto } from './dto/stock-ranking-query.dto';
 
 @Controller('api/briefs')
 export class DailyBriefController {
@@ -78,6 +79,11 @@ export class DailyBriefController {
       period,
       includeDebug: this.parseBoolean(includeDebug),
     });
+  }
+
+  @Get('statistics/stocks')
+  getStockRanking(@Query() query: StockRankingQueryDto) {
+    return this.dailyBriefService.getStockRanking(query);
   }
 
   @Delete('history')

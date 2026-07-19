@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, PipelineStage } from 'mongoose';
 import { DailyBrief, DailyBriefDocument } from '../schemas/daily-brief.schema';
 
 export interface DailyBriefListOptions {
@@ -13,6 +13,35 @@ export interface DailyBriefListOptions {
 
 interface DeleteBriefResult {
   deletedCount?: number;
+}
+
+export interface StockRankingOptions {
+  period?: string;
+  startDate?: string;
+  endDate?: string;
+  limit?: number;
+}
+
+export interface StockRankingItem {
+  company: string;
+  code: string | null;
+  appearanceCount: number;
+  briefCount: number;
+  firstAppearedDate: string;
+  lastAppearedDate: string;
+}
+
+interface StockRankingAggregationResult {
+  briefs: Array<{ totalBriefs: number }>;
+  summary: Array<{ uniqueStocks: number; totalAppearances: number }>;
+  rankings: Array<{
+    company: string;
+    code?: string;
+    appearanceCount: number;
+    briefIds: unknown[];
+    firstAppearedDate: string;
+    lastAppearedDate: string;
+  }>;
 }
 
 @Injectable()
@@ -94,6 +123,197 @@ export class DailyBriefRepository {
       page,
       limit,
       totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  async getStockRanking(options: StockRankingOptions = {}) {
+    const match: Record<string, unknown> = { status: 'success' };
+    if (options.period) {
+      match.period = options.period;
+    }
+    if (options.startDate || options.endDate) {
+      const briefDate: Record<string, string> = {};
+      if (options.startDate) {
+        briefDate.$gte = options.startDate;
+      }
+      if (options.endDate) {
+        briefDate.$lte = options.endDate;
+      }
+      match.briefDate = briefDate;
+    }
+
+    const stockOccurrences: PipelineStage.FacetPipelineStage[] = [
+      {
+        $project: {
+          briefId: '$_id',
+          briefDate: 1,
+          topics: {
+            $cond: [{ $isArray: '$analysis.topics' }, '$analysis.topics', []],
+          },
+        },
+      },
+      { $unwind: '$topics' },
+      {
+        $project: {
+          briefId: 1,
+          briefDate: 1,
+          mappings: {
+            $cond: [
+              { $isArray: '$topics.aShareMapping' },
+              '$topics.aShareMapping',
+              [],
+            ],
+          },
+        },
+      },
+      { $unwind: '$mappings' },
+      {
+        $set: {
+          company: {
+            $trim: {
+              input: {
+                $convert: {
+                  input: '$mappings.company',
+                  to: 'string',
+                  onError: '',
+                  onNull: '',
+                },
+              },
+            },
+          },
+          code: {
+            $toUpper: {
+              $replaceAll: {
+                input: {
+                  $trim: {
+                    input: {
+                      $convert: {
+                        input: '$mappings.code',
+                        to: 'string',
+                        onError: '',
+                        onNull: '',
+                      },
+                    },
+                  },
+                },
+                find: ' ',
+                replacement: '',
+              },
+            },
+          },
+        },
+      },
+      {
+        $set: {
+          identity: {
+            $cond: [
+              {
+                $not: [{ $in: ['$code', ['', '待验证', '未知', 'N/A', '-']] }],
+              },
+              { $concat: ['code:', '$code'] },
+              {
+                $cond: [
+                  {
+                    $not: [
+                      {
+                        $in: ['$company', ['', '待验证', '未知', 'N/A', '-']],
+                      },
+                    ],
+                  },
+                  { $concat: ['company:', '$company'] },
+                  '',
+                ],
+              },
+            ],
+          },
+        },
+      },
+      { $match: { identity: { $ne: '' } } },
+    ];
+    const groupedStocks: PipelineStage.FacetPipelineStage[] = [
+      ...stockOccurrences,
+      {
+        $group: {
+          _id: '$identity',
+          company: { $last: '$company' },
+          code: { $last: '$code' },
+          appearanceCount: { $sum: 1 },
+          briefIds: { $addToSet: '$briefId' },
+          firstAppearedDate: { $min: '$briefDate' },
+          lastAppearedDate: { $max: '$briefDate' },
+        },
+      },
+    ];
+    const limit = Math.min(200, Math.max(1, options.limit || 50));
+    const [result] =
+      await this.dailyBriefModel.aggregate<StockRankingAggregationResult>([
+        { $match: match },
+        { $sort: { briefDate: 1, createdAt: 1 } },
+        {
+          $facet: {
+            briefs: [{ $count: 'totalBriefs' }],
+            summary: [
+              ...groupedStocks,
+              {
+                $group: {
+                  _id: null,
+                  uniqueStocks: { $sum: 1 },
+                  totalAppearances: { $sum: '$appearanceCount' },
+                },
+              },
+              { $project: { _id: 0, uniqueStocks: 1, totalAppearances: 1 } },
+            ],
+            rankings: [
+              ...groupedStocks,
+              {
+                $set: {
+                  briefCount: { $size: '$briefIds' },
+                },
+              },
+              {
+                $sort: {
+                  appearanceCount: -1,
+                  briefCount: -1,
+                  lastAppearedDate: -1,
+                  code: 1,
+                  company: 1,
+                },
+              },
+              { $limit: limit },
+              {
+                $project: {
+                  _id: 0,
+                  company: 1,
+                  code: 1,
+                  appearanceCount: 1,
+                  briefIds: 1,
+                  firstAppearedDate: 1,
+                  lastAppearedDate: 1,
+                },
+              },
+            ],
+          },
+        },
+      ]);
+
+    const summary = result?.summary[0];
+    const invalidNames = new Set(['', '待验证', '未知', 'N/A', '-']);
+    return {
+      totalBriefs: result?.briefs[0]?.totalBriefs || 0,
+      uniqueStocks: summary?.uniqueStocks || 0,
+      totalAppearances: summary?.totalAppearances || 0,
+      rankings: (result?.rankings || []).map(
+        (item): StockRankingItem => ({
+          company: invalidNames.has(item.company)
+            ? item.code || ''
+            : item.company,
+          code: item.code || null,
+          appearanceCount: item.appearanceCount,
+          briefCount: item.briefIds.length,
+          firstAppearedDate: item.firstAppearedDate,
+          lastAppearedDate: item.lastAppearedDate,
+        }),
+      ),
     };
   }
 
