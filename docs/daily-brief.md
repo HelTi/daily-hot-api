@@ -209,6 +209,67 @@ curl 'http://localhost:6688/api/briefs?period=daily&page=1&limit=10'
 curl 'http://localhost:6688/api/briefs?status=success'
 ```
 
+### 获取历史股票出现次数排名
+
+统计成功简报中 `analysis.topics[].aShareMapping[]` 的股票出现次数，并按次数从高到低返回排名：
+
+```bash
+curl 'http://localhost:6688/api/briefs/statistics/stocks'
+```
+
+支持按 `period`、简报日期范围和返回数量筛选：
+
+```bash
+curl 'http://localhost:6688/api/briefs/statistics/stocks?period=daily&startDate=2026-01-01&endDate=2026-07-18&limit=20'
+```
+
+查询参数：
+
+| 参数 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `period` | string | 全部 | 只统计指定类型的成功简报 |
+| `startDate` | string | 不限制 | 起始简报日期，格式 `YYYY-MM-DD`，包含当天 |
+| `endDate` | string | 不限制 | 截止简报日期，格式 `YYYY-MM-DD`，包含当天 |
+| `limit` | number | `50` | 返回排名数量，范围 `1-200` |
+
+响应示例：
+
+```json
+{
+  "filters": {
+    "period": "daily",
+    "startDate": "2026-01-01",
+    "endDate": "2026-07-18",
+    "limit": 20
+  },
+  "summary": {
+    "briefCount": 120,
+    "uniqueStockCount": 86,
+    "totalAppearances": 438
+  },
+  "rankings": [
+    {
+      "rank": 1,
+      "company": "拓普集团",
+      "code": "601689",
+      "appearanceCount": 18,
+      "briefCount": 13,
+      "firstAppearedDate": "2026-01-08",
+      "lastAppearedDate": "2026-07-17"
+    }
+  ]
+}
+```
+
+统计口径：
+
+- 仅统计 `status=success` 的历史简报。
+- 同一股票每出现在一个主题的 `aShareMapping` 中一次，`appearanceCount` 增加一次。
+- `briefCount` 是包含该股票的不同简报数量；同一简报内出现多次只计一份简报。
+- 优先按去除空格并转为大写的股票代码合并；代码为空、`待验证` 或无效占位值时，按公司名合并。
+- 没有有效股票代码和公司名的映射会被忽略。
+- 次数相同时，依次按覆盖简报数、最近出现日期、股票代码和公司名排序。
+
 ### 删除指定日期简报
 
 删除某一天所有 period 的简报：

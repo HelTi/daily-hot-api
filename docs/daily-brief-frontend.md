@@ -41,6 +41,22 @@ GET /api/briefs/2026-07-05?period=daily
 GET /api/briefs?page=1&limit=20&period=daily
 ```
 
+### 历史股票排名
+
+```bash
+GET /api/briefs/statistics/stocks?period=daily&limit=20
+```
+
+接口返回历史成功简报中 A 股映射的出现次数排名。前端可使用：
+
+- `rank`：名次
+- `company` / `code`：股票展示信息
+- `appearanceCount`：在主题映射中的累计出现次数
+- `briefCount`：覆盖的不同简报数量
+- `firstAppearedDate` / `lastAppearedDate`：首次和最近出现日期
+
+建议同时展示 `appearanceCount` 和 `briefCount`，避免把同一份简报内的多主题重复出现误解为跨日持续热度。日期筛选可通过 `startDate` 和 `endDate` 传递，格式均为 `YYYY-MM-DD`。
+
 前端默认不要使用 `includeDebug=true`。`rawInputItems` 和 `searchEvidence` 是后端排查字段，不适合常规展示。
 
 ## 核心字段
