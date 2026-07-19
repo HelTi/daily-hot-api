@@ -3,17 +3,34 @@ import { DailyBriefService } from './daily-brief.service';
 
 describe('DailyBriefService stock ranking', () => {
   const getStockRanking = jest.fn();
+  const cacheGet = jest.fn();
+  const cacheSet = jest.fn();
+  const cacheDelByPattern = jest.fn();
+  const configGet = jest.fn();
   let service: DailyBriefService;
 
   beforeEach(() => {
     getStockRanking.mockReset();
+    cacheGet.mockReset().mockResolvedValue(null);
+    cacheSet.mockReset().mockResolvedValue(undefined);
+    cacheDelByPattern.mockReset().mockResolvedValue(undefined);
+    configGet
+      .mockReset()
+      .mockImplementation(
+        (_key: string, defaultValue: unknown) => defaultValue,
+      );
     service = new DailyBriefService(
-      undefined,
+      { get: configGet } as never,
       { getStockRanking } as never,
       undefined,
       undefined,
       undefined,
       undefined,
+      {
+        get: cacheGet,
+        set: cacheSet,
+        delByPattern: cacheDelByPattern,
+      } as never,
     );
   });
 
@@ -60,6 +77,38 @@ describe('DailyBriefService stock ranking', () => {
       totalAppearances: 5,
     });
     expect(result.rankings.map((item) => item.rank)).toEqual([1, 2]);
+    expect(cacheSet).toHaveBeenCalledWith(
+      expect.stringContaining('daily-brief:statistics:stocks:'),
+      expect.objectContaining({ data: result }),
+      43200,
+    );
+  });
+
+  it('returns a cached response without querying MongoDB', async () => {
+    const cachedResponse = {
+      filters: {
+        period: 'daily',
+        startDate: null,
+        endDate: null,
+        limit: 20,
+      },
+      summary: {
+        briefCount: 1,
+        uniqueStockCount: 1,
+        totalAppearances: 1,
+      },
+      rankings: [],
+    };
+    cacheGet.mockResolvedValue({
+      data: cachedResponse,
+      updateTime: '2026-07-19T00:00:00.000Z',
+    });
+
+    await expect(
+      service.getStockRanking({ period: 'daily', limit: 20 }),
+    ).resolves.toEqual(cachedResponse);
+    expect(getStockRanking).not.toHaveBeenCalled();
+    expect(cacheSet).not.toHaveBeenCalled();
   });
 
   it('rejects a reversed date range before querying MongoDB', async () => {

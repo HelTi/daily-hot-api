@@ -14,6 +14,7 @@ export class CacheService {
   private readonly DEFAULT_TTL: number;
   private readonly logger = new Logger(CacheService.name);
   private useMemoryCache = false; // 标记是否使用内存缓存
+  private readonly memoryCacheKeys = new Set<string>();
 
   constructor(
     @InjectRedis() private readonly redis: Redis,
@@ -102,7 +103,11 @@ export class CacheService {
    */
   async delByPattern(prefix: string): Promise<void> {
     if (this.useMemoryCache) {
-      return this.delFromMemory(prefix);
+      const keys = [...this.memoryCacheKeys].filter((key) =>
+        key.startsWith(prefix),
+      );
+      await Promise.all(keys.map((key) => this.delFromMemory(key)));
+      return;
     }
     try {
       const keys = await this.redis.keys(`${prefix}*`);
@@ -149,6 +154,7 @@ export class CacheService {
   ): Promise<void> {
     try {
       await this.memoryCache.set(key, value, ttl * 1000); // 转换为毫秒
+      this.memoryCacheKeys.add(key);
       this.logger.log(`💾 [MEMORY] ${key} cached for ${ttl}s`);
     } catch (error) {
       this.logger.error(`内存缓存写入失败: ${error.message}`);
@@ -158,6 +164,7 @@ export class CacheService {
   private async delFromMemory(key: string): Promise<void> {
     try {
       await this.memoryCache.del(key);
+      this.memoryCacheKeys.delete(key);
       this.logger.log(`🗑️ [MEMORY] Deleted cache for ${key}`);
     } catch (error) {
       this.logger.error(`内存缓存删除失败: ${error.message}`);

@@ -30,6 +30,7 @@ BRIEF_SOURCES=cls,yicai,wallstreet,jin10,tonghuashun,eastmoney,gelonghui
 BRIEF_LOOKBACK_HOURS=24
 BRIEF_TOP_ITEMS_PER_SOURCE=10
 BRIEF_MAX_TOPICS=12
+BRIEF_STOCK_RANKING_CACHE_TTL=43200
 
 # OPENAI 配置
 OPENAI_API_KEY=skxxx
@@ -52,6 +53,7 @@ TAVILY_MAX_RESULTS=5
 | `BRIEF_LOOKBACK_HOURS` | 读取历史热点的回看窗口 |
 | `BRIEF_TOP_ITEMS_PER_SOURCE` | 每个源最多纳入多少条热点，默认只分析前 10 条 |
 | `BRIEF_MAX_TOPICS` | 最多对多少个候选主题做 Tavily 搜索增强 |
+| `BRIEF_STOCK_RANKING_CACHE_TTL` | 股票历史排名接口缓存时长（秒），默认 `43200`（12 小时） |
 | `OPENAI_API_KEY` | OpenAI SDK 使用的 API Key |
 | `OPENAI_API_BASE_URL` | 兼容 OpenAI 协议的 API Base URL |
 | `AI_MODEL` | 生成简报使用的模型 |
@@ -119,6 +121,7 @@ curl http://localhost:6688/api/briefs/config
   "lookbackHours": 24,
   "topItemsPerSource": 10,
   "maxTopics": 12,
+  "stockRankingCacheTtl": 43200,
   "model": "deepseek-v4-flash",
   "tavilyConfigured": true
 }
@@ -222,6 +225,8 @@ curl 'http://localhost:6688/api/briefs/statistics/stocks'
 ```bash
 curl 'http://localhost:6688/api/briefs/statistics/stocks?period=daily&startDate=2026-01-01&endDate=2026-07-18&limit=20'
 ```
+
+接口按完整查询条件缓存结果，默认缓存 12 小时。缓存复用现有缓存模块（Redis 不可用时降级为进程内存缓存）；成功生成简报或实际删除简报后，会清理股票排名缓存。
 
 查询参数：
 

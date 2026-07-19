@@ -41,6 +41,7 @@ export const configValidationSchema = z.object({
   BRIEF_LOOKBACK_HOURS: z.coerce.number().default(24),
   BRIEF_TOP_ITEMS_PER_SOURCE: z.coerce.number().default(10),
   BRIEF_MAX_TOPICS: z.coerce.number().default(12),
+  BRIEF_STOCK_RANKING_CACHE_TTL: z.coerce.number().default(43200),
   OPENAI_API_KEY: z.string().default(''),
   OPENAI_API_BASE_URL: z.string().default(''),
   AI_MODEL: z.string().default('deepseek-v4-flash'),

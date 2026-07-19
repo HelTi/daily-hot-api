@@ -29,6 +29,8 @@ export default (): ConfigType => ({
   BRIEF_TOP_ITEMS_PER_SOURCE:
     parseInt(process.env.BRIEF_TOP_ITEMS_PER_SOURCE) || 10,
   BRIEF_MAX_TOPICS: parseInt(process.env.BRIEF_MAX_TOPICS) || 12,
+  BRIEF_STOCK_RANKING_CACHE_TTL:
+    parseInt(process.env.BRIEF_STOCK_RANKING_CACHE_TTL) || 43200,
   OPENAI_API_KEY: process.env.OPENAI_API_KEY || '',
   OPENAI_API_BASE_URL: process.env.OPENAI_API_BASE_URL || '',
   AI_MODEL: process.env.AI_MODEL || 'deepseek-v4-flash',
