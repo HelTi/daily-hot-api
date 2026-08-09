@@ -22,7 +22,7 @@ log "开始部署..."
 
 # 安装依赖
 log "正在安装依赖..."
-npm install || handle_error "npm install 失败"
+npm ci || handle_error "npm ci 失败"
 
 # 构建项目
 log "正在构建项目..."
