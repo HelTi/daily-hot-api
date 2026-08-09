@@ -3,12 +3,45 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, PipelineStage } from 'mongoose';
 import { DailyBrief, DailyBriefDocument } from '../schemas/daily-brief.schema';
 
+/** AI 可能给出的占位值，等同于「没有填」。 */
+const INVALID_VALUES = ['', '待验证', '未知', 'N/A', '-'];
+
+/** A 股代码可能带的交易所前缀。 */
+const MARKET_PREFIXES = ['SH', 'SZ', 'BJ'];
+
+/**
+ * 取数组里最后一个非 null 的值，没有则返回空字符串。
+ * 上游按 briefDate 升序排过，所以「最后一个」就是最近一次出现的值。
+ */
+const lastValidValue = (field: string) => ({
+  $let: {
+    vars: {
+      valid: {
+        $filter: {
+          input: field,
+          // 两轮分组分别会塞进 null 和空串，这里一并过滤
+          cond: { $not: [{ $in: ['$$this', [null, ...INVALID_VALUES]] }] },
+        },
+      },
+    },
+    in: { $ifNull: [{ $arrayElemAt: ['$$valid', -1] }, ''] },
+  },
+});
+
 export interface DailyBriefListOptions {
   page?: number;
   limit?: number;
   status?: 'generating' | 'success' | 'failed';
   period?: string;
-  includeDebug?: boolean;
+}
+
+export interface DailyBriefListItem {
+  status: 'generating' | 'success' | 'failed';
+  briefDate: string;
+  period: string;
+  analysis: { summary?: string };
+  topicCount?: number;
+  updatedAt?: Date;
 }
 
 interface DeleteBriefResult {
@@ -32,13 +65,12 @@ export interface StockRankingItem {
 }
 
 interface StockRankingAggregationResult {
-  briefs: Array<{ totalBriefs: number }>;
   summary: Array<{ uniqueStocks: number; totalAppearances: number }>;
   rankings: Array<{
     company: string;
     code?: string;
     appearanceCount: number;
-    briefIds: unknown[];
+    briefCount: number;
     firstAppearedDate: string;
     lastAppearedDate: string;
   }>;
@@ -80,7 +112,7 @@ export class DailyBriefRepository {
   async list(options: DailyBriefListOptions = {}) {
     const page = Math.max(1, options.page || 1);
     const limit = Math.min(100, Math.max(1, options.limit || 20));
-    const { status, period, includeDebug } = options;
+    const { status, period } = options;
     const query: Record<string, unknown> = {};
 
     if (status) {
@@ -91,34 +123,39 @@ export class DailyBriefRepository {
     }
 
     const skip = (page - 1) * limit;
+    // 列表只需要摘要和主题数量，用投影把 analysis.topics / markdown 留在数据库侧，
+    // 避免为了算一个 length 就把整份简报读出来。
     const [data, total] = await Promise.all([
-      this.dailyBriefModel
-        .find(query, includeDebug ? undefined : this.publicProjection)
-        .sort({ briefDate: -1, createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean(),
+      this.dailyBriefModel.aggregate<DailyBriefListItem>([
+        { $match: query },
+        { $sort: { briefDate: -1, createdAt: -1 } },
+        { $skip: skip },
+        { $limit: limit },
+        {
+          $project: {
+            _id: 0,
+            status: 1,
+            briefDate: 1,
+            period: 1,
+            analysis: {
+              summary: { $ifNull: ['$analysis.summary', '$$REMOVE'] },
+            },
+            topicCount: {
+              $cond: [
+                { $isArray: '$analysis.topics' },
+                { $size: '$analysis.topics' },
+                '$$REMOVE',
+              ],
+            },
+            updatedAt: 1,
+          },
+        },
+      ]),
       this.dailyBriefModel.countDocuments(query),
     ]);
 
-    // 返回的数据处理
-    const resData = data.map((item) => {
-      const topics = item.analysis?.topics;
-
-      return {
-        status: item.status,
-        briefDate: item.briefDate,
-        period: item.period,
-        analysis: {
-          summary: item.analysis?.summary,
-        },
-        topicCount: Array.isArray(topics) ? topics.length : undefined,
-        updatedAt: item.updatedAt,
-      };
-    });
-
     return {
-      data: resData,
+      data,
       total,
       page,
       limit,
@@ -142,7 +179,7 @@ export class DailyBriefRepository {
       match.briefDate = briefDate;
     }
 
-    const stockOccurrences: PipelineStage.FacetPipelineStage[] = [
+    const stockOccurrences: PipelineStage[] = [
       {
         $project: {
           briefId: '$_id',
@@ -208,57 +245,149 @@ export class DailyBriefRepository {
           },
         },
       },
+      // 归一化股票代码：去掉 `.SH` 之类的后缀和 `SH`/`SZ`/`BJ` 前缀，
+      // 让 600519 / SH600519 / 600519.SH 归到同一只股票。
+      // MongoDB 4.0 没有 $regexFind，这里只用字符串切分实现。
       {
         $addFields: {
-          identity: {
-            $cond: [
-              {
-                $not: [{ $in: ['$code', ['', '待验证', '未知', 'N/A', '-']] }],
+          code: {
+            $let: {
+              vars: {
+                base: { $arrayElemAt: [{ $split: ['$code', '.'] }, 0] },
               },
-              { $concat: ['code:', '$code'] },
-              {
-                $cond: [
-                  {
-                    $not: [
+              in: {
+                $let: {
+                  vars: {
+                    prefix: { $substrCP: ['$$base', 0, 2] },
+                    rest: {
+                      $substrCP: ['$$base', 2, { $strLenCP: '$$base' }],
+                    },
+                  },
+                  in: {
+                    $cond: [
                       {
-                        $in: ['$company', ['', '待验证', '未知', 'N/A', '-']],
+                        $and: [
+                          { $in: ['$$prefix', MARKET_PREFIXES] },
+                          { $eq: [{ $strLenCP: '$$rest' }, 6] },
+                        ],
                       },
+                      '$$rest',
+                      '$$base',
                     ],
                   },
-                  { $concat: ['company:', '$company'] },
-                  '',
-                ],
+                },
+              },
+            },
+          },
+        },
+      },
+      {
+        $addFields: {
+          hasValidCompany: { $not: [{ $in: ['$company', INVALID_VALUES] }] },
+          hasValidCode: { $not: [{ $in: ['$code', INVALID_VALUES] }] },
+        },
+      },
+      {
+        // 先按公司名归并：同一家公司在不同简报里可能有时带代码、有时不带，
+        // 只有先聚到一起才能把「有代码」的那次学到的代码补给「没代码」的那些。
+        $addFields: {
+          groupKey: {
+            $cond: [
+              '$hasValidCompany',
+              { $concat: ['company:', '$company'] },
+              {
+                $cond: ['$hasValidCode', { $concat: ['code:', '$code'] }, ''],
               },
             ],
           },
         },
       },
-      { $match: { identity: { $ne: '' } } },
-    ];
-    const groupedStocks: PipelineStage.FacetPipelineStage[] = [
-      ...stockOccurrences,
-      {
-        $group: {
-          _id: '$identity',
-          company: { $last: '$company' },
-          code: { $last: '$code' },
-          appearanceCount: { $sum: 1 },
-          briefIds: { $addToSet: '$briefId' },
-          firstAppearedDate: { $min: '$briefDate' },
-          lastAppearedDate: { $max: '$briefDate' },
-        },
-      },
+      { $match: { groupKey: { $ne: '' } } },
     ];
     const limit = Math.min(200, Math.max(1, options.limit || 50));
-    const [result] =
-      await this.dailyBriefModel.aggregate<StockRankingAggregationResult>([
+    // 分组只跑一遍：summary 和 rankings 从同一份聚合结果分叉，
+    // 简报总数用一次 countDocuments 并行取，不必为它保留原始文档。
+    const [[result], totalBriefs] = await Promise.all([
+      this.dailyBriefModel.aggregate<StockRankingAggregationResult>([
         { $match: match },
+        // $last 依赖这个顺序来取每只股票最新出现时的名称和代码
         { $sort: { briefDate: 1, createdAt: 1 } },
+        ...stockOccurrences,
+        // 第一轮：按公司名（无公司名时按代码）聚合，顺带收集出现过的代码和名称
+        {
+          $group: {
+            _id: '$groupKey',
+            companies: {
+              $push: { $cond: ['$hasValidCompany', '$company', null] },
+            },
+            codes: { $push: { $cond: ['$hasValidCode', '$code', null] } },
+            appearanceCount: { $sum: 1 },
+            briefIds: { $addToSet: '$briefId' },
+            firstAppearedDate: { $min: '$briefDate' },
+            lastAppearedDate: { $max: '$briefDate' },
+          },
+        },
+        {
+          // 取最近一次出现时的有效代码/名称（上游已按 briefDate 升序排过）
+          $addFields: {
+            company: lastValidValue('$companies'),
+            resolvedCode: lastValidValue('$codes'),
+          },
+        },
+        {
+          // 学到代码的公司改用代码作为身份，于是「有代码」和「没代码」的
+          // 同一家公司、以及只有代码没有名称的记录，都会并到同一条上。
+          $addFields: {
+            identity: {
+              $cond: [
+                { $eq: ['$resolvedCode', ''] },
+                '$_id',
+                { $concat: ['code:', '$resolvedCode'] },
+              ],
+            },
+          },
+        },
+        { $sort: { lastAppearedDate: 1 } },
+        // 第二轮：把归并到同一身份的分组合并成最终结果
+        {
+          $group: {
+            _id: '$identity',
+            companies: { $push: '$company' },
+            code: { $last: '$resolvedCode' },
+            appearanceCount: { $sum: '$appearanceCount' },
+            briefIdGroups: { $push: '$briefIds' },
+            firstAppearedDate: { $min: '$firstAppearedDate' },
+            lastAppearedDate: { $max: '$lastAppearedDate' },
+          },
+        },
+        {
+          $addFields: {
+            company: lastValidValue('$companies'),
+            // 跨分组去重后才是真实的简报数
+            briefCount: {
+              $size: {
+                $reduce: {
+                  input: '$briefIdGroups',
+                  initialValue: [],
+                  in: { $setUnion: ['$$value', '$$this'] },
+                },
+              },
+            },
+          },
+        },
+        // 中间字段只用于计算，尽早丢弃避免传输大量 ObjectId
+        {
+          $project: {
+            briefIdGroups: 0,
+            briefIds: 0,
+            companies: 0,
+            codes: 0,
+            resolvedCode: 0,
+          },
+        },
         {
           $facet: {
-            briefs: [{ $count: 'totalBriefs' }],
             summary: [
-              ...groupedStocks,
               {
                 $group: {
                   _id: null,
@@ -269,12 +398,6 @@ export class DailyBriefRepository {
               { $project: { _id: 0, uniqueStocks: 1, totalAppearances: 1 } },
             ],
             rankings: [
-              ...groupedStocks,
-              {
-                $addFields: {
-                  briefCount: { $size: '$briefIds' },
-                },
-              },
               {
                 $sort: {
                   appearanceCount: -1,
@@ -291,7 +414,7 @@ export class DailyBriefRepository {
                   company: 1,
                   code: 1,
                   appearanceCount: 1,
-                  briefIds: 1,
+                  briefCount: 1,
                   firstAppearedDate: 1,
                   lastAppearedDate: 1,
                 },
@@ -299,12 +422,14 @@ export class DailyBriefRepository {
             ],
           },
         },
-      ]);
+      ]),
+      this.dailyBriefModel.countDocuments(match),
+    ]);
 
     const summary = result?.summary[0];
-    const invalidNames = new Set(['', '待验证', '未知', 'N/A', '-']);
+    const invalidNames = new Set(INVALID_VALUES);
     return {
-      totalBriefs: result?.briefs[0]?.totalBriefs || 0,
+      totalBriefs,
       uniqueStocks: summary?.uniqueStocks || 0,
       totalAppearances: summary?.totalAppearances || 0,
       rankings: (result?.rankings || []).map(
@@ -314,7 +439,7 @@ export class DailyBriefRepository {
             : item.company,
           code: item.code || null,
           appearanceCount: item.appearanceCount,
-          briefCount: item.briefIds.length,
+          briefCount: item.briefCount,
           firstAppearedDate: item.firstAppearedDate,
           lastAppearedDate: item.lastAppearedDate,
         }),

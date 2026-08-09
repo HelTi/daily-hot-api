@@ -1,5 +1,4 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { CacheData, CacheService } from '../cache/cache.service';
 import {
   DailyBriefRepository,
@@ -15,9 +14,11 @@ import {
   GenerateBriefOptions,
 } from './interfaces/daily-brief.interface';
 import { StockRankingQueryDto } from './dto/stock-ranking-query.dto';
+import { mapWithConcurrency } from './utils/concurrency';
+import { endOfBriefDate, formatBriefDate } from './utils/brief-date';
+import { DailyBriefConfigService } from './daily-brief.config';
 
 const STOCK_RANKING_CACHE_PREFIX = 'daily-brief:statistics:stocks:';
-const DEFAULT_STOCK_RANKING_CACHE_TTL = 12 * 60 * 60;
 
 export interface StockRankingResponse {
   filters: {
@@ -39,7 +40,7 @@ export class DailyBriefService {
   private readonly logger = new Logger(DailyBriefService.name);
 
   constructor(
-    private readonly configService: ConfigService,
+    private readonly config: DailyBriefConfigService,
     private readonly dailyBriefRepository: DailyBriefRepository,
     private readonly hotItemRepository: HotItemRepository,
     private readonly hotListsService: HotListsService,
@@ -52,11 +53,10 @@ export class DailyBriefService {
     const period = options.period || 'daily';
     const briefDate = options.date || this.formatDate(new Date());
     const sources = this.resolveSources(options.sources);
-    const lookbackHours = this.configService.get<number>(
-      'BRIEF_LOOKBACK_HOURS',
-      24,
+    const inputWindow = this.resolveInputWindow(
+      briefDate,
+      this.config.lookbackHours,
     );
-    const inputWindow = this.resolveInputWindow(briefDate, lookbackHours);
 
     if (!options.force) {
       const existing = await this.dailyBriefRepository.findByDate(
@@ -68,12 +68,19 @@ export class DailyBriefService {
           return existing;
         }
         if (existing.status === 'generating') {
-          throw new BadRequestException(
-            'A daily brief is already being generated for date ' +
-              briefDate +
-              ' and period ' +
-              period +
-              '.',
+          // 进程在生成过程中被中断时文档会永远停在 generating，
+          // 超过阈值就当作失败处理，否则该日期会被永久锁死。
+          if (!this.isGenerationStale(existing.updatedAt)) {
+            throw new BadRequestException(
+              'A daily brief is already being generated for date ' +
+                briefDate +
+                ' and period ' +
+                period +
+                '.',
+            );
+          }
+          this.logger.warn(
+            `Found a stale generating brief for ${briefDate}/${period}, regenerating`,
           );
         }
       }
@@ -94,10 +101,10 @@ export class DailyBriefService {
         inputWindow.start.getTime(),
         inputWindow.end.getTime(),
       );
-      const inputItems = this.mergeAndLimitItems([
-        ...fetchedItems,
-        ...historyItems,
-      ]);
+      const inputItems = this.mergeAndLimitItems(
+        [...fetchedItems, ...historyItems],
+        sources.length,
+      );
 
       if (inputItems.length === 0) {
         throw new Error('No hot items available for brief generation');
@@ -131,8 +138,8 @@ export class DailyBriefService {
       return this.toPublicBrief(brief);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      // 失败时没有任何简报内容落库，排名数据不变，无需清缓存
       await this.dailyBriefRepository.markFailed(briefDate, period, message);
-      await this.invalidateStockRankingCache();
       throw error;
     }
   }
@@ -145,12 +152,15 @@ export class DailyBriefService {
     return this.dailyBriefRepository.findByDate(date, period, includeDebug);
   }
 
+  /**
+   * 列表只返回摘要字段，因此没有 `includeDebug`：
+   * 需要 rawInputItems / searchEvidence 时用 findLatest 或 findByDate。
+   */
   list(options: {
     page?: number;
     limit?: number;
     status?: 'generating' | 'success' | 'failed';
     period?: string;
-    includeDebug?: boolean;
   }) {
     return this.dailyBriefRepository.list(options);
   }
@@ -197,16 +207,10 @@ export class DailyBriefService {
         ...item,
       })),
     };
-    const configuredTtl = this.configService.get<number>(
-      'BRIEF_STOCK_RANKING_CACHE_TTL',
-      DEFAULT_STOCK_RANKING_CACHE_TTL,
-    );
-    const ttl =
-      configuredTtl > 0 ? configuredTtl : DEFAULT_STOCK_RANKING_CACHE_TTL;
     await this.cacheService.set(
       cacheKey,
       { data: response, updateTime: new Date().toISOString() },
-      ttl,
+      this.config.stockRankingCacheTtl,
     );
 
     return response;
@@ -259,32 +263,21 @@ export class DailyBriefService {
     };
   }
 
+  /**
+   * 不包含 `enabled`：调度器可以在运行期被 start/stop，
+   * 真实状态由 `DailyBriefScheduler.isEnabled()` 提供，在 controller 里合并。
+   */
   getConfig() {
     return {
-      enabled: this.configService.get<boolean>('BRIEF_ENABLED', false),
-      cronExpression: this.configService.get<string>(
-        'BRIEF_CRON_EXPRESSION',
-        '0 12 * * *',
-      ),
-      timezone: this.configService.get<string>(
-        'BRIEF_TIMEZONE',
-        'Asia/Shanghai',
-      ),
+      cronExpression: this.config.cronExpression,
+      timezone: this.config.timezone,
       sources: this.resolveSources(),
-      lookbackHours: this.configService.get<number>('BRIEF_LOOKBACK_HOURS', 24),
-      topItemsPerSource: this.configService.get<number>(
-        'BRIEF_TOP_ITEMS_PER_SOURCE',
-        10,
-      ),
-      maxTopics: this.configService.get<number>('BRIEF_MAX_TOPICS', 12),
-      stockRankingCacheTtl: this.configService.get<number>(
-        'BRIEF_STOCK_RANKING_CACHE_TTL',
-        DEFAULT_STOCK_RANKING_CACHE_TTL,
-      ),
+      lookbackHours: this.config.lookbackHours,
+      topItemsPerSource: this.config.topItemsPerSource,
+      maxTopics: this.config.maxTopics,
+      stockRankingCacheTtl: this.config.stockRankingCacheTtl,
       model: this.aiAnalysisClient.getModel(),
-      tavilyConfigured: Boolean(
-        this.configService.get<string>('TAVILY_API_KEY'),
-      ),
+      tavilyConfigured: this.config.tavilyConfigured,
     };
   }
 
@@ -307,23 +300,25 @@ export class DailyBriefService {
   private async fetchLatestSourceItems(
     sources: string[],
   ): Promise<BriefInputItem[]> {
-    const topItemsPerSource = this.configService.get<number>(
-      'BRIEF_TOP_ITEMS_PER_SOURCE',
-      10,
-    );
-    const results: BriefInputItem[] = [];
+    const topItemsPerSource = this.config.topItemsPerSource;
 
-    for (const source of sources) {
-      try {
-        const hotList = await this.hotListsService.getHotList(source, {}, true);
-        if (!hotList.data.length) {
-          continue;
-        }
+    const results = await mapWithConcurrency(
+      sources,
+      this.config.sourceConcurrency,
+      async (source): Promise<BriefInputItem[]> => {
+        try {
+          const hotList = await this.hotListsService.getHotList(
+            source,
+            {},
+            true,
+          );
+          if (!hotList.data.length) {
+            return [];
+          }
 
-        await this.hotItemRepository.saveHotItems(hotList.data, source);
+          await this.hotItemRepository.saveHotItems(hotList.data, source);
 
-        results.push(
-          ...hotList.data.slice(0, topItemsPerSource).map((item) => ({
+          return hotList.data.slice(0, topItemsPerSource).map((item) => ({
             source,
             title: item.title,
             desc: item.desc,
@@ -331,18 +326,19 @@ export class DailyBriefService {
             url: item.url,
             mobileUrl: item.mobileUrl,
             timestamp: item.timestamp,
-          })),
-        );
-      } catch (error) {
-        this.logger.warn(
-          `Failed to refresh source ${source}: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-        );
-      }
-    }
+          }));
+        } catch (error) {
+          this.logger.warn(
+            `Failed to refresh source ${source}: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+          return [];
+        }
+      },
+    );
 
-    return results;
+    return results.flat();
   }
 
   private async loadHistoryItems(
@@ -350,10 +346,7 @@ export class DailyBriefService {
     startTime: number,
     endTime: number,
   ): Promise<BriefInputItem[]> {
-    const topItemsPerSource = this.configService.get<number>(
-      'BRIEF_TOP_ITEMS_PER_SOURCE',
-      10,
-    );
+    const topItemsPerSource = this.config.topItemsPerSource;
     const results = await Promise.all(
       sources.map(async (source) => {
         const items = await this.hotItemRepository.getDataByTimeRange(
@@ -381,10 +374,8 @@ export class DailyBriefService {
     return results.flat();
   }
 
-  private mergeAndLimitItems(items: BriefInputItem[]) {
-    const maxItems =
-      this.resolveSources().length *
-      this.configService.get<number>('BRIEF_TOP_ITEMS_PER_SOURCE', 10);
+  private mergeAndLimitItems(items: BriefInputItem[], sourceCount: number) {
+    const maxItems = Math.max(1, sourceCount) * this.config.topItemsPerSource;
     const seen = new Set<string>();
     const merged: BriefInputItem[] = [];
 
@@ -412,11 +403,12 @@ export class DailyBriefService {
   private async buildSearchEvidence(
     items: BriefInputItem[],
   ): Promise<BriefSearchEvidence[]> {
-    const maxTopics = this.configService.get<number>('BRIEF_MAX_TOPICS', 12);
-    const candidates = items.slice(0, maxTopics);
+    const candidates = items.slice(0, this.config.maxTopics);
 
-    return Promise.all(
-      candidates.map(async (item) => {
+    return mapWithConcurrency(
+      candidates,
+      this.config.searchConcurrency,
+      async (item) => {
         const query = `${item.title} ${item.desc || ''} 产业链 A股 影响`;
         const results = await this.tavilySearchClient.search(query);
         return {
@@ -424,29 +416,26 @@ export class DailyBriefService {
           query,
           results,
         };
-      }),
+      },
+    );
+  }
+
+  private isGenerationStale(updatedAt?: Date) {
+    if (!updatedAt) {
+      return true;
+    }
+
+    return (
+      Date.now() - new Date(updatedAt).getTime() >
+      this.config.generatingTimeoutMinutes * 60000
     );
   }
 
   private resolveSources(sources?: string[]) {
     const configuredSources =
-      sources && sources.length > 0
-        ? sources
-        : this.parseCsv(
-            this.configService.get<string>(
-              'BRIEF_SOURCES',
-              'cls,eastmoney,gelonghui',
-            ),
-          );
+      sources && sources.length > 0 ? sources : this.config.sources;
 
     return configuredSources.filter(Boolean);
-  }
-
-  private parseCsv(value: string) {
-    return value
-      .split(',')
-      .map((item) => item.trim())
-      .filter(Boolean);
   }
 
   private resolveInputWindow(briefDate: string, lookbackHours: number) {
@@ -455,7 +444,7 @@ export class DailyBriefService {
     const end =
       briefDate === today
         ? now
-        : this.createDateInTimezone(briefDate, 23, 59, 59);
+        : endOfBriefDate(briefDate, this.config.timezone);
     const start = new Date(end.getTime() - lookbackHours * 60 * 60 * 1000);
 
     return {
@@ -466,16 +455,7 @@ export class DailyBriefService {
   }
 
   private formatDate(date: Date) {
-    const timezone = this.configService.get<string>(
-      'BRIEF_TIMEZONE',
-      'Asia/Shanghai',
-    );
-    return new Intl.DateTimeFormat('en-CA', {
-      timeZone: timezone,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).format(date);
+    return formatBriefDate(date, this.config.timezone);
   }
 
   private validateBriefDate(date: string) {
@@ -522,54 +502,6 @@ export class DailyBriefService {
     }
 
     return this.formatDate(cutoff);
-  }
-
-  private createDateInTimezone(
-    date: string,
-    hour: number,
-    minute: number,
-    second: number,
-  ) {
-    const timezone = this.configService.get<string>(
-      'BRIEF_TIMEZONE',
-      'Asia/Shanghai',
-    );
-    const [year, month, day] = date.split('-').map(Number);
-    const utcGuess = new Date(
-      Date.UTC(year, month - 1, day, hour, minute, second),
-    );
-    const offset = this.getTimezoneOffset(utcGuess, timezone);
-
-    return new Date(utcGuess.getTime() - offset);
-  }
-
-  private getTimezoneOffset(date: Date, timezone: string) {
-    const parts = new Intl.DateTimeFormat('en-US', {
-      timeZone: timezone,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hourCycle: 'h23',
-    }).formatToParts(date);
-    const values = Object.fromEntries(
-      parts
-        .filter((part) => part.type !== 'literal')
-        .map((part) => [part.type, Number(part.value)]),
-    );
-
-    return (
-      Date.UTC(
-        values.year,
-        values.month - 1,
-        values.day,
-        values.hour,
-        values.minute,
-        values.second,
-      ) - date.getTime()
-    );
   }
 
   private buildFallbackMarkdown(analysis: { summary: string }) {

@@ -41,12 +41,19 @@ export const configValidationSchema = z.object({
   BRIEF_LOOKBACK_HOURS: z.coerce.number().default(24),
   BRIEF_TOP_ITEMS_PER_SOURCE: z.coerce.number().default(10),
   BRIEF_MAX_TOPICS: z.coerce.number().default(12),
-  BRIEF_STOCK_RANKING_CACHE_TTL: z.coerce.number().default(43200),
+  // 下限 1：之前靠 service 里的 `ttl > 0 ? ttl : 默认值` 兜底，改为启动时直接拒绝非法值
+  BRIEF_STOCK_RANKING_CACHE_TTL: z.coerce.number().min(1).default(43200),
+  BRIEF_GENERATING_TIMEOUT_MINUTES: z.coerce.number().min(1).default(30),
+  BRIEF_SOURCE_CONCURRENCY: z.coerce.number().min(1).default(3),
+  BRIEF_SEARCH_CONCURRENCY: z.coerce.number().min(1).default(3),
   OPENAI_API_KEY: z.string().default(''),
   OPENAI_API_BASE_URL: z.string().default(''),
   AI_MODEL: z.string().default('deepseek-v4-flash'),
+  AI_TIMEOUT_MS: z.coerce.number().min(1000).default(120000),
+  AI_MAX_RETRIES: z.coerce.number().min(0).default(2),
   TAVILY_API_KEY: z.string().default(''),
   TAVILY_MAX_RESULTS: z.coerce.number().default(5),
+  TAVILY_TIMEOUT_MS: z.coerce.number().min(1000).default(10000),
 });
 
 export type ConfigType = z.infer<typeof configValidationSchema>;

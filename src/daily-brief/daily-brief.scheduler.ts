@@ -4,10 +4,10 @@ import {
   OnModuleDestroy,
   OnModuleInit,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { SchedulerRegistry } from '@nestjs/schedule';
 import { CronJob } from 'cron';
 import { DailyBriefService } from './daily-brief.service';
+import { DailyBriefConfigService } from './daily-brief.config';
 
 @Injectable()
 export class DailyBriefScheduler implements OnModuleInit, OnModuleDestroy {
@@ -17,11 +17,11 @@ export class DailyBriefScheduler implements OnModuleInit, OnModuleDestroy {
   private enabled = false;
 
   constructor(
-    private readonly configService: ConfigService,
+    private readonly config: DailyBriefConfigService,
     private readonly schedulerRegistry: SchedulerRegistry,
     private readonly dailyBriefService: DailyBriefService,
   ) {
-    this.enabled = this.configService.get<boolean>('BRIEF_ENABLED', false);
+    this.enabled = this.config.enabled;
   }
 
   onModuleInit() {
@@ -32,18 +32,20 @@ export class DailyBriefScheduler implements OnModuleInit, OnModuleDestroy {
     this.stopCronJob();
   }
 
+  /**
+   * 调度器是否启用的唯一事实来源。
+   * `start()` / `stop()` 只改内存状态，直接读 `BRIEF_ENABLED` 会与真实状态不一致。
+   */
+  isEnabled() {
+    return this.enabled;
+  }
+
   getStatus() {
     return {
       isRunning: this.isRunning,
       enabled: this.enabled,
-      cronExpression: this.configService.get<string>(
-        'BRIEF_CRON_EXPRESSION',
-        '0 12 * * *',
-      ),
-      timezone: this.configService.get<string>(
-        'BRIEF_TIMEZONE',
-        'Asia/Shanghai',
-      ),
+      cronExpression: this.config.cronExpression,
+      timezone: this.config.timezone,
       cronJobExists: this.schedulerRegistry.doesExist('cron', this.cronJobName),
     };
   }
@@ -59,6 +61,8 @@ export class DailyBriefScheduler implements OnModuleInit, OnModuleDestroy {
   }
 
   reconfigure() {
+    // 重新读取配置，使其与 cron 表达式、时区一样跟随配置变化
+    this.enabled = this.config.enabled;
     this.setupCronJob();
   }
 
@@ -71,14 +75,8 @@ export class DailyBriefScheduler implements OnModuleInit, OnModuleDestroy {
         return;
       }
 
-      const cronExpression = this.configService.get<string>(
-        'BRIEF_CRON_EXPRESSION',
-        '0 12 * * *',
-      );
-      const timezone = this.configService.get<string>(
-        'BRIEF_TIMEZONE',
-        'Asia/Shanghai',
-      );
+      const cronExpression = this.config.cronExpression;
+      const timezone = this.config.timezone;
       const job = new CronJob(
         cronExpression,
         () => {

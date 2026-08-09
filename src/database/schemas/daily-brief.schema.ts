@@ -69,3 +69,11 @@ export const DailyBriefSchema = SchemaFactory.createForClass(DailyBrief);
 
 DailyBriefSchema.index({ briefDate: 1, period: 1 }, { unique: true });
 DailyBriefSchema.index({ createdAt: -1 });
+
+// list()：默认排序 { briefDate: -1, createdAt: -1 }，query 可能为空
+DailyBriefSchema.index({ briefDate: -1, createdAt: -1 });
+// findLatest()：{ status: 'success' } + 同样的排序；
+// 也覆盖 getStockRanking 不带 period 时的 { status, briefDate } 匹配（反向扫描）
+DailyBriefSchema.index({ status: 1, briefDate: -1, createdAt: -1 });
+// getStockRanking()：{ status, period, briefDate 区间 } + { briefDate: 1, createdAt: 1 } 排序
+DailyBriefSchema.index({ status: 1, period: 1, briefDate: 1, createdAt: 1 });

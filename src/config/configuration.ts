@@ -31,9 +31,19 @@ export default (): ConfigType => ({
   BRIEF_MAX_TOPICS: parseInt(process.env.BRIEF_MAX_TOPICS) || 12,
   BRIEF_STOCK_RANKING_CACHE_TTL:
     parseInt(process.env.BRIEF_STOCK_RANKING_CACHE_TTL) || 43200,
+  BRIEF_GENERATING_TIMEOUT_MINUTES:
+    parseInt(process.env.BRIEF_GENERATING_TIMEOUT_MINUTES) || 30,
+  BRIEF_SOURCE_CONCURRENCY: parseInt(process.env.BRIEF_SOURCE_CONCURRENCY) || 3,
+  BRIEF_SEARCH_CONCURRENCY: parseInt(process.env.BRIEF_SEARCH_CONCURRENCY) || 3,
   OPENAI_API_KEY: process.env.OPENAI_API_KEY || '',
   OPENAI_API_BASE_URL: process.env.OPENAI_API_BASE_URL || '',
   AI_MODEL: process.env.AI_MODEL || 'deepseek-v4-flash',
+  AI_TIMEOUT_MS: parseInt(process.env.AI_TIMEOUT_MS) || 120000,
+  // 0 是合法值（关闭重试），因此不能用 `|| 2` 兜底
+  AI_MAX_RETRIES: Number.isFinite(parseInt(process.env.AI_MAX_RETRIES))
+    ? parseInt(process.env.AI_MAX_RETRIES)
+    : 2,
   TAVILY_API_KEY: process.env.TAVILY_API_KEY || '',
   TAVILY_MAX_RESULTS: parseInt(process.env.TAVILY_MAX_RESULTS) || 5,
+  TAVILY_TIMEOUT_MS: parseInt(process.env.TAVILY_TIMEOUT_MS) || 10000,
 });
