@@ -8,11 +8,13 @@ import { TavilySearchClient } from './clients/tavily-search.client';
 import { DailyBriefController } from './daily-brief.controller';
 import { DailyBriefScheduler } from './daily-brief.scheduler';
 import { DailyBriefService } from './daily-brief.service';
+import { DailyBriefConfigService } from './daily-brief.config';
 
 @Module({
   imports: [ScheduleModule, CacheModule, DatabaseModule, HotListsModule],
   controllers: [DailyBriefController],
   providers: [
+    DailyBriefConfigService,
     DailyBriefService,
     DailyBriefScheduler,
     AiAnalysisClient,

@@ -31,15 +31,21 @@ BRIEF_LOOKBACK_HOURS=24
 BRIEF_TOP_ITEMS_PER_SOURCE=10
 BRIEF_MAX_TOPICS=12
 BRIEF_STOCK_RANKING_CACHE_TTL=43200
+BRIEF_GENERATING_TIMEOUT_MINUTES=30
+BRIEF_SOURCE_CONCURRENCY=3
+BRIEF_SEARCH_CONCURRENCY=3
 
 # OPENAI 配置
 OPENAI_API_KEY=skxxx
 OPENAI_API_BASE_URL=https://api.deepseek.com
 AI_MODEL=deepseek-v4-flash
+AI_TIMEOUT_MS=120000
+AI_MAX_RETRIES=2
 
 # Tavily Search API Key
 TAVILY_API_KEY=tvly-dev-xxx
 TAVILY_MAX_RESULTS=5
+TAVILY_TIMEOUT_MS=10000
 ```
 
 字段说明：
@@ -54,11 +60,17 @@ TAVILY_MAX_RESULTS=5
 | `BRIEF_TOP_ITEMS_PER_SOURCE` | 每个源最多纳入多少条热点，默认只分析前 10 条 |
 | `BRIEF_MAX_TOPICS` | 最多对多少个候选主题做 Tavily 搜索增强 |
 | `BRIEF_STOCK_RANKING_CACHE_TTL` | 股票历史排名接口缓存时长（秒），默认 `43200`（12 小时） |
+| `BRIEF_GENERATING_TIMEOUT_MINUTES` | 简报卡在 `generating` 多久后视为失败并允许重新生成，默认 `30` 分钟 |
+| `BRIEF_SOURCE_CONCURRENCY` | 抓取热榜源时的最大并发数，默认 `3` |
+| `BRIEF_SEARCH_CONCURRENCY` | 调用 Tavily 搜索时的最大并发数，默认 `3` |
 | `OPENAI_API_KEY` | OpenAI SDK 使用的 API Key |
 | `OPENAI_API_BASE_URL` | 兼容 OpenAI 协议的 API Base URL |
 | `AI_MODEL` | 生成简报使用的模型 |
+| `AI_TIMEOUT_MS` | 单次 AI 请求超时（毫秒），默认 `120000` |
+| `AI_MAX_RETRIES` | AI 请求失败重试次数，默认 `2`，设为 `0` 关闭重试 |
 | `TAVILY_API_KEY` | Tavily 搜索 API Key |
 | `TAVILY_MAX_RESULTS` | 每个搜索请求最多返回多少条结果 |
+| `TAVILY_TIMEOUT_MS` | 单次 Tavily 搜索超时（毫秒），默认 `10000` |
 
 ## 数据结构
 
@@ -103,6 +115,19 @@ TAVILY_MAX_RESULTS=5
 ```text
 http://localhost:6688
 ```
+
+::: warning 写接口没有内建鉴权
+服务本身不对任何接口做鉴权。下列接口会**消耗真实费用或删除数据**，必须在反向代理 / 网关层限制来源，不要直接暴露到公网：
+
+| 接口 | 风险 |
+| --- | --- |
+| `POST /api/briefs/generate` | 触发 AI 与 Tavily 调用，直接产生费用 |
+| `DELETE /api/briefs/:date` | 删除指定日期的简报 |
+| `DELETE /api/briefs/history` | 按条件批量删除历史简报 |
+| `POST /api/briefs/scheduler/start`<br>`POST /api/briefs/scheduler/stop`<br>`POST /api/briefs/scheduler/reconfigure` | 改变定时任务运行状态 |
+
+`GET` 接口只读，可以按需开放给前端。
+:::
 
 ### 获取简报配置
 
@@ -226,9 +251,25 @@ curl 'http://localhost:6688/api/briefs/statistics/stocks'
 curl 'http://localhost:6688/api/briefs/statistics/stocks?period=daily&startDate=2026-01-01&endDate=2026-07-18&limit=20'
 ```
 
-接口按完整查询条件缓存结果，默认缓存 12 小时。缓存复用现有缓存模块（Redis 不可用时降级为进程内存缓存）；成功生成简报或实际删除简报后，会清理股票排名缓存。
+接口按完整查询条件缓存结果，默认缓存 12 小时。缓存复用现有缓存模块（Redis 不可用时降级为进程内存缓存）；成功生成简报或实际删除简报后，会清理股票排名缓存（生成失败不会清，因为排名数据没有变化）。
+
+### 同一只股票的归并规则
+
+AI 给出的 `aShareMapping` 里，同一家公司在不同简报中可能写法不一致，聚合会先做归一化再统计：
+
+- **代码格式**：去掉 `.SH` / `.SZ` 之类的后缀，以及 `SH` / `SZ` / `BJ` 前缀。`600519`、`SH600519`、`600519.SH`、`sh600519` 视为同一只。
+- **有时带代码、有时不带**：先按公司名归并，把「带代码那次」学到的代码补给同一家公司的其他记录，再按代码归并。
+- **只有代码没有公司名**（`company` 为 `待验证` 等占位值）：也会并入同代码的那一条，并显示已知的公司名。
+- **始终没有代码**：按公司名单独成条，`code` 返回 `null`。
+- `appearanceCount` 统计出现次数（同一份简报里出现两次算两次），`briefCount` 统计去重后的简报数。
+
+公司名和代码取该股票**最近一次**出现时的有效值。
 
 股票排名聚合兼容 MongoDB 4.0：使用 `$addFields` 和 `$reduce`/`$split` 处理股票代码，不依赖 MongoDB 4.2/4.4 才提供的 `$set` 聚合阶段和 `$replaceAll` 表达式。
+
+简报列表接口（`GET /api/briefs`）的投影聚合同样兼容 4.0，用到的 `$$REMOVE`（3.6 引入）、`$ifNull`、`$size` 都在 4.0 可用范围内。
+
+这条约束由 `src/database/repositories/mongo40-compatibility.spec.ts` 守护：它把两条管道实际发出的算子全部抽出来，既检查没有出现 4.2/4.4/5.0 才有的算子，也用白名单确保不会悄悄引入未经确认的新算子。改动聚合管道后请保证该测试通过。
 
 查询参数：
 

@@ -1,5 +1,4 @@
 import { Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
 import { z } from 'zod';
 import {
@@ -7,6 +6,7 @@ import {
   BriefInputItem,
   BriefSearchEvidence,
 } from '../interfaces/daily-brief.interface';
+import { DailyBriefConfigService } from '../daily-brief.config';
 
 const stringArraySchema = z.array(z.string()).catch([]);
 
@@ -62,7 +62,7 @@ const briefAnalysisSchema = z
 
 @Injectable()
 export class AiAnalysisClient {
-  constructor(private readonly configService: ConfigService) {}
+  constructor(private readonly config: DailyBriefConfigService) {}
 
   async analyzeDailyBrief(input: {
     briefDate: string;
@@ -70,7 +70,7 @@ export class AiAnalysisClient {
     items: BriefInputItem[];
     searchEvidence: BriefSearchEvidence[];
   }): Promise<BriefAnalysis> {
-    const apiKey = this.configService.get<string>('OPENAI_API_KEY');
+    const apiKey = this.config.openaiApiKey;
     if (!apiKey) {
       throw new Error('OPENAI_API_KEY is not configured');
     }
@@ -78,7 +78,10 @@ export class AiAnalysisClient {
     const model = this.getModel();
     const client = new OpenAI({
       apiKey,
-      baseURL: this.configService.get<string>('OPENAI_API_BASE_URL'),
+      baseURL: this.config.openaiBaseUrl,
+      // SDK 默认是 10 分钟超时 + 2 次重试，最坏情况会把整次简报生成挂住半小时
+      timeout: this.config.aiTimeoutMs,
+      maxRetries: this.config.aiMaxRetries,
     });
 
     const completion = await client.chat.completions.create({
@@ -117,7 +120,7 @@ export class AiAnalysisClient {
   }
 
   getModel(): string {
-    return this.configService.get<string>('AI_MODEL', 'deepseek-v4-flash');
+    return this.config.aiModel;
   }
 
   private getJsonSchemaInstruction() {
@@ -179,6 +182,16 @@ export class AiAnalysisClient {
       );
     }
 
-    return result.data as BriefAnalysis;
+    // schema 里每个字段都带 .catch()，`{}` 之类的响应同样会解析成功。
+    // 没有这层校验，一份空简报会被当成生成成功写库。
+    const analysis = result.data as BriefAnalysis;
+    if (!analysis.summary.trim()) {
+      throw new Error('AI returned a brief analysis without a summary');
+    }
+    if (analysis.topics.length === 0) {
+      throw new Error('AI returned a brief analysis without any topic');
+    }
+
+    return analysis;
   }
 }

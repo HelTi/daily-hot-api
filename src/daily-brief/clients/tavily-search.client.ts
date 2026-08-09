@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { BriefSearchResult } from '../interfaces/daily-brief.interface';
+import { DailyBriefConfigService } from '../daily-brief.config';
 
 interface TavilyResponse {
   results?: Array<{
@@ -15,16 +15,17 @@ interface TavilyResponse {
 export class TavilySearchClient {
   private readonly logger = new Logger(TavilySearchClient.name);
 
-  constructor(private readonly configService: ConfigService) {}
+  constructor(private readonly config: DailyBriefConfigService) {}
 
   async search(query: string): Promise<BriefSearchResult[]> {
-    const apiKey = this.configService.get<string>('TAVILY_API_KEY');
+    const apiKey = this.config.tavilyApiKey;
     if (!apiKey) {
       this.logger.warn('TAVILY_API_KEY is not configured, skipping search');
       return [];
     }
 
-    const maxResults = this.configService.get<number>('TAVILY_MAX_RESULTS', 5);
+    const maxResults = this.config.tavilyMaxResults;
+    const timeoutMs = this.config.tavilyTimeoutMs;
 
     try {
       const response = await fetch('https://api.tavily.com/search', {
@@ -40,6 +41,7 @@ export class TavilySearchClient {
           include_raw_content: false,
           max_results: maxResults,
         }),
+        signal: AbortSignal.timeout(timeoutMs),
       });
 
       if (!response.ok) {
@@ -59,11 +61,13 @@ export class TavilySearchClient {
           score: item.score,
         }));
     } catch (error) {
-      this.logger.warn(
-        `Tavily search error: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
+      const reason =
+        error instanceof Error && error.name === 'TimeoutError'
+          ? `timed out after ${timeoutMs}ms`
+          : error instanceof Error
+            ? error.message
+            : String(error);
+      this.logger.warn(`Tavily search error: ${reason}`);
       return [];
     }
   }

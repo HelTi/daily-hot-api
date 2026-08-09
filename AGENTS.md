@@ -67,6 +67,8 @@ Config is defined in:
 
 When adding a new environment variable, update all three places.
 
+Daily brief code must not call `ConfigService` directly. Read settings through `DailyBriefConfigService` (`src/daily-brief/daily-brief.config.ts`), which uses `getOrThrow` so defaults live only in `configuration.ts` / `validation.schema.ts`. When adding a daily brief variable, add a typed getter there too.
+
 Daily brief variables:
 
 ```bash
@@ -77,13 +79,19 @@ BRIEF_SOURCES=cls,yicai,wallstreet,jin10,tonghuashun,eastmoney,gelonghui
 BRIEF_LOOKBACK_HOURS=24
 BRIEF_TOP_ITEMS_PER_SOURCE=10
 BRIEF_MAX_TOPICS=12
+BRIEF_GENERATING_TIMEOUT_MINUTES=30
+BRIEF_SOURCE_CONCURRENCY=3
+BRIEF_SEARCH_CONCURRENCY=3
 
 OPENAI_API_KEY=skxxx
 OPENAI_API_BASE_URL=https://api.deepseek.com
 AI_MODEL=deepseek-v4-flash
+AI_TIMEOUT_MS=120000
+AI_MAX_RETRIES=2
 
 TAVILY_API_KEY=tvly-dev-xxx
 TAVILY_MAX_RESULTS=5
+TAVILY_TIMEOUT_MS=10000
 ```
 
 Do not print real API keys from `.env` in final responses or logs.
@@ -99,6 +107,9 @@ src/daily-brief/daily-brief.module.ts
 src/daily-brief/daily-brief.controller.ts
 src/daily-brief/daily-brief.service.ts
 src/daily-brief/daily-brief.scheduler.ts
+src/daily-brief/daily-brief.config.ts
+src/daily-brief/utils/brief-date.ts
+src/daily-brief/utils/concurrency.ts
 src/daily-brief/clients/ai-analysis.client.ts
 src/daily-brief/clients/tavily-search.client.ts
 src/daily-brief/interfaces/daily-brief.interface.ts
@@ -113,8 +124,12 @@ Behavior:
 - Refreshes configured hot list sources before generating.
 - Saves fetched hot items to the existing history repository.
 - Analyzes only the first `BRIEF_TOP_ITEMS_PER_SOURCE` items per source. Current default is 10.
-- Uses Tavily to enrich up to `BRIEF_MAX_TOPICS` candidate topics.
+- Uses Tavily to enrich up to `BRIEF_MAX_TOPICS` candidate topics, at most `BRIEF_SEARCH_CONCURRENCY` at a time.
 - Uses the OpenAI SDK with `OPENAI_API_BASE_URL` and `AI_MODEL`.
+- All external calls are bounded: `TAVILY_TIMEOUT_MS` per search, `AI_TIMEOUT_MS` / `AI_MAX_RETRIES` per analysis.
+- Rejects an analysis without a summary or without topics, so an empty AI response is recorded as `failed` rather than `success`.
+- A brief stuck in `generating` for longer than `BRIEF_GENERATING_TIMEOUT_MINUTES` is treated as stale and may be regenerated without `force`.
+- `GET /api/briefs/config` reports `enabled` from the scheduler's live state, so it reflects `scheduler/start` and `scheduler/stop`.
 - Saves generated briefs to MongoDB.
 - Stores `rawInputItems` and `searchEvidence` for backend debugging, but does not return them by default.
 
@@ -141,6 +156,8 @@ POST   /api/briefs/scheduler/start
 POST   /api/briefs/scheduler/stop
 POST   /api/briefs/scheduler/reconfigure
 ```
+
+No endpoint has built-in authentication. `POST /api/briefs/generate` (spends AI and Tavily quota), both `DELETE` routes, and the `scheduler/*` routes are expected to be restricted at the reverse proxy / gateway layer. Do not add auth to these without asking the maintainer first.
 
 Examples:
 
@@ -183,6 +200,8 @@ When adding a schema or repository:
 3. Add and export the repository from `DatabaseModule`.
 
 Daily brief collection has a unique index on `{ briefDate: 1, period: 1 }`.
+
+Aggregation pipelines must stay MongoDB 4.0 compatible. `src/database/repositories/mongo40-compatibility.spec.ts` extracts every operator the daily brief pipelines emit and fails on anything introduced after 4.0 (`$set`, `$replaceAll`, `$unionWith`, `$function`, `$getField`, …). Run it after touching any pipeline.
 
 ## Scheduler Notes
 

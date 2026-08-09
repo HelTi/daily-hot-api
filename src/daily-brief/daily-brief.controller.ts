@@ -4,7 +4,6 @@ import {
   Delete,
   Get,
   Param,
-  ParseIntPipe,
   Post,
   Query,
 } from '@nestjs/common';
@@ -12,6 +11,8 @@ import { DailyBriefService } from './daily-brief.service';
 import { DailyBriefScheduler } from './daily-brief.scheduler';
 import { GenerateBriefDto } from './dto/generate-brief.dto';
 import { StockRankingQueryDto } from './dto/stock-ranking-query.dto';
+import { ListBriefsQueryDto } from './dto/list-briefs-query.dto';
+import { BriefDateParamDto } from './dto/brief-date-param.dto';
 
 @Controller('api/briefs')
 export class DailyBriefController {
@@ -27,7 +28,10 @@ export class DailyBriefController {
 
   @Get('config')
   getConfig() {
-    return this.dailyBriefService.getConfig();
+    return {
+      enabled: this.dailyBriefScheduler.isEnabled(),
+      ...this.dailyBriefService.getConfig(),
+    };
   }
 
   @Get('scheduler/status')
@@ -65,20 +69,8 @@ export class DailyBriefController {
   }
 
   @Get()
-  list(
-    @Query('page', new ParseIntPipe({ optional: true })) page?: number,
-    @Query('limit', new ParseIntPipe({ optional: true })) limit?: number,
-    @Query('status') status?: 'generating' | 'success' | 'failed',
-    @Query('period') period?: string,
-    @Query('includeDebug') includeDebug?: string,
-  ) {
-    return this.dailyBriefService.list({
-      page,
-      limit,
-      status,
-      period,
-      includeDebug: this.parseBoolean(includeDebug),
-    });
+  list(@Query() query: ListBriefsQueryDto) {
+    return this.dailyBriefService.list(query);
   }
 
   @Get('statistics/stocks')
@@ -101,20 +93,23 @@ export class DailyBriefController {
 
   @Get(':date')
   findByDate(
-    @Param('date') date: string,
+    @Param() params: BriefDateParamDto,
     @Query('period') period?: string,
     @Query('includeDebug') includeDebug?: string,
   ) {
     return this.dailyBriefService.findByDate(
-      date,
+      params.date,
       period,
       this.parseBoolean(includeDebug),
     );
   }
 
   @Delete(':date')
-  deleteByDate(@Param('date') date: string, @Query('period') period?: string) {
-    return this.dailyBriefService.deleteByDate(date, period);
+  deleteByDate(
+    @Param() params: BriefDateParamDto,
+    @Query('period') period?: string,
+  ) {
+    return this.dailyBriefService.deleteByDate(params.date, period);
   }
 
   private parseBoolean(value?: string) {
