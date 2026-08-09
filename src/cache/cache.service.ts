@@ -110,11 +110,23 @@ export class CacheService {
       return;
     }
     try {
-      const keys = await this.redis.keys(`${prefix}*`);
-      if (keys.length > 0) {
-        await this.redis.del(...keys);
+      // KEYS 会阻塞整个 Redis 实例遍历全库，改用 SCAN 游标分批扫描并分批删除。
+      // SCAN 可能重复返回同一个 key，因此用 del 的实际返回值统计，而不是扫到的数量。
+      const stream = this.redis.scanStream({
+        match: `${prefix}*`,
+        count: 100,
+      });
+      let deleted = 0;
+
+      for await (const keys of stream as AsyncIterable<string[]>) {
+        if (keys.length > 0) {
+          deleted += await this.redis.del(...keys);
+        }
+      }
+
+      if (deleted > 0) {
         this.logger.log(
-          `🗑️ [REDIS] Deleted ${keys.length} keys with prefix: ${prefix}`,
+          `🗑️ [REDIS] Deleted ${deleted} keys with prefix: ${prefix}`,
         );
       }
     } catch (error) {
