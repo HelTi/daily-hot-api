@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, Logger } from '@nestjs/common';
 import { DailyBriefService } from './daily-brief.service';
 
 describe('DailyBriefService stock ranking', () => {
@@ -218,6 +218,26 @@ describe('DailyBriefService generateBrief', () => {
     };
     expect(sources).toEqual(['cls']);
     expect(items).toHaveLength(2);
+  });
+
+  it('logs why a configured source contributed no fresh items', async () => {
+    // 被调度器禁用时简报只剩历史条目，不能静默退化。
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+    getHotList.mockResolvedValue({
+      success: false,
+      error: "Source 'cls' is disabled",
+      items: [],
+    });
+    getDataByTimeRange.mockResolvedValue(buildItems('history', 1));
+
+    await service.generateBrief({ sources: ['cls'], force: true });
+
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "Brief source cls contributed no fresh items: Source 'cls' is disabled",
+      ),
+    );
+    warn.mockRestore();
   });
 
   it('interleaves sources and searches a shared title only once', async () => {

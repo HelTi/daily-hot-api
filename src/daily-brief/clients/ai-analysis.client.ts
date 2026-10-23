@@ -8,6 +8,16 @@ import {
 } from '../interfaces/daily-brief.interface';
 import { DailyBriefConfigService } from '../daily-brief.config';
 
+/**
+ * 提示词预算：进入模型的热点条目和搜索证据上限。
+ * 候选主题的选取也按 `maxTopics` 截断，避免为进不了提示词的主题付费；
+ * `BRIEF_MAX_TOPICS` 的校验上限与 `maxTopics` 对齐，配置超限会在启动时报错。
+ */
+export const PROMPT_BUDGET = {
+  maxHotItems: 60,
+  maxTopics: 12,
+} as const;
+
 const stringArraySchema = z.array(z.string()).catch([]);
 
 const briefTopicSchema = z
@@ -104,23 +114,27 @@ export class AiAnalysisClient {
             instruction: this.getJsonSchemaInstruction(),
             briefDate: input.briefDate,
             sources: input.sources,
-            hotItems: input.items.slice(0, 60).map((item) => ({
-              ...item,
-              title: this.truncate(item.title, 160),
-              desc: this.truncate(item.desc ?? '', 280),
-              url: this.truncate(item.url, 500),
-              mobileUrl: this.truncate(item.mobileUrl ?? '', 500),
-            })),
-            searchEvidence: input.searchEvidence.slice(0, 12).map((item) => ({
-              topicTitle: this.truncate(item.topicTitle, 160),
-              query: this.truncate(item.query, 280),
-              results: item.results.slice(0, 3).map((result) => ({
-                ...result,
-                title: this.truncate(result.title, 160),
-                url: this.truncate(result.url, 500),
-                content: this.truncate(result.content ?? '', 300),
+            hotItems: input.items
+              .slice(0, PROMPT_BUDGET.maxHotItems)
+              .map((item) => ({
+                ...item,
+                title: this.truncate(item.title, 160),
+                desc: this.truncate(item.desc ?? '', 280),
+                url: this.truncate(item.url, 500),
+                mobileUrl: this.truncate(item.mobileUrl ?? '', 500),
               })),
-            })),
+            searchEvidence: input.searchEvidence
+              .slice(0, PROMPT_BUDGET.maxTopics)
+              .map((item) => ({
+                topicTitle: this.truncate(item.topicTitle, 160),
+                query: this.truncate(item.query, 280),
+                results: item.results.slice(0, 3).map((result) => ({
+                  ...result,
+                  title: this.truncate(result.title, 160),
+                  url: this.truncate(result.url, 500),
+                  content: this.truncate(result.content ?? '', 300),
+                })),
+              })),
           }),
         },
       ],

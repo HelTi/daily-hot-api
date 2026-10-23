@@ -1,4 +1,5 @@
 import { DailyBriefRepository } from './daily-brief.repository';
+import { HotItemRepository } from './hot-item.repository';
 
 /**
  * 部署目标是 MongoDB 4.0，这里守住聚合管道不引入 4.2+ 才提供的算子。
@@ -149,5 +150,31 @@ describe('daily brief aggregation pipelines stay MongoDB 4.0 compatible', () => 
     );
     const unexpected = [...used].filter((operator) => !allowed.has(operator));
     expect(unexpected).toEqual([]);
+  });
+});
+
+describe('hot item aggregation pipelines stay MongoDB 4.0 compatible', () => {
+  it('only uses operators available in MongoDB 4.0', async () => {
+    const capturedPipelines: unknown[][] = [];
+    const aggregate = jest.fn((pipeline: unknown[]) => {
+      capturedPipelines.push(pipeline);
+      return Promise.resolve([]);
+    });
+    const repository = new HotItemRepository({
+      aggregate,
+      countDocuments: jest.fn().mockResolvedValue(0),
+    } as never);
+
+    await repository.getStats();
+
+    expect(capturedPipelines).toHaveLength(1);
+    const allowed = new Set(['$group', '$sort', '$sum', '$max']);
+    const used = new Set(
+      capturedPipelines.flatMap((pipeline) => [...collectOperators(pipeline)]),
+    );
+    expect([...used].filter((operator) => !allowed.has(operator))).toEqual([]);
+    expect(
+      [...used].filter((operator) => FORBIDDEN.includes(operator)),
+    ).toEqual([]);
   });
 });

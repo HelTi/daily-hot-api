@@ -20,7 +20,33 @@
 
 默认面向前端的响应不会返回 `rawInputItems` 和 `searchEvidence`。这两个字段仍会保存到数据库，用于后端排查和审计，需要显式传 `includeDebug=true` 才会返回。
 
-每个来源先取配置的前 N 条，再交错放入 AI 输入，避免一个来源按时间排序后占满候选。Tavily 搜索最多选择 `BRIEF_MAX_TOPICS` 个不同标题，提示词预算将其进一步限制到 12 个；送入模型的条目、描述和搜索摘要还会截断，原始输入仍保留在数据库调试字段中。
+每个来源先取配置的前 N 条，再交错放入 AI 输入，避免一个来源按时间排序后占满候选。Tavily 搜索最多选择 `BRIEF_MAX_TOPICS` 个不同标题；送入模型的条目、描述和搜索摘要还会截断，原始输入仍保留在数据库调试字段中。
+
+提示词预算定义在 `src/daily-brief/clients/ai-analysis.client.ts` 的 `PROMPT_BUDGET`：最多 60 条热点条目、12 条搜索证据。`BRIEF_MAX_TOPICS` 的校验上限与它对齐，配成更大的值会在启动时报配置错误，而不是跑完一次简报才发现主题被静默截断。`BRIEF_TOP_ITEMS_PER_SOURCE × 来源数` 超过 60 时（默认 7 个来源 × 10 条 = 70）多出的条目不会进入提示词，由于候选是按来源交错排列的，被丢掉的是每个来源排名最末的条目。调整这两个变量时需要一并考虑 `PROMPT_BUDGET`。
+
+### 来源必须处于启用状态
+
+简报刷新走调度器的抓取任务（`FetchHotDataTask`），因此 `BRIEF_SOURCES` 里的来源还必须在 `source_configs` 中是启用状态。被禁用的来源不会被抓取，该来源只能贡献回看窗口内的历史条目，调度停抓之后这部分数据也会逐渐枯竭。这种情况会在生成日志里给出告警：
+
+```text
+WARN [DailyBriefService] Brief source cls contributed no fresh items: Source 'cls' is disabled
+```
+
+同一条日志也用于区分"来源确实没有数据"和"来源已损坏"。核对来源状态：
+
+```bash
+curl http://localhost:6689/api/scheduler/configs
+```
+
+启用某个来源：
+
+```bash
+curl -X PUT http://localhost:6689/api/scheduler/config/cls \
+  -H 'Content-Type: application/json' \
+  -d '{"enabled":true}'
+```
+
+另外 `IGNORE_SAVE_SOURCES` 中的来源仍会被抓取并参与简报，只是不写入历史库。
 
 ## 环境变量
 
@@ -58,10 +84,10 @@ TAVILY_TIMEOUT_MS=10000
 | `BRIEF_ENABLED` | 是否在服务启动时启用每日简报定时任务 |
 | `BRIEF_CRON_EXPRESSION` | 简报生成 cron 表达式，默认每天 12 点 |
 | `BRIEF_TIMEZONE` | 简报日期和定时任务使用的时区 |
-| `BRIEF_SOURCES` | 参与简报的数据源名称，逗号分隔 |
+| `BRIEF_SOURCES` | 参与简报的数据源名称，逗号分隔，需在 `source_configs` 中启用 |
 | `BRIEF_LOOKBACK_HOURS` | 读取历史热点的回看窗口 |
 | `BRIEF_TOP_ITEMS_PER_SOURCE` | 每个源最多纳入多少条热点，默认只分析前 10 条 |
-| `BRIEF_MAX_TOPICS` | 最多对多少个候选主题做 Tavily 搜索增强 |
+| `BRIEF_MAX_TOPICS` | 最多对多少个候选主题做 Tavily 搜索增强，取值 1–12 |
 | `BRIEF_STOCK_RANKING_CACHE_TTL` | 股票历史排名接口缓存时长（秒），默认 `43200`（12 小时） |
 | `BRIEF_GENERATING_TIMEOUT_MINUTES` | 简报卡在 `generating` 多久后视为失败并允许重新生成，默认 `30` 分钟 |
 | `BRIEF_SOURCE_CONCURRENCY` | 抓取热榜源时的最大并发数，默认 `3` |

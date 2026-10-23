@@ -39,10 +39,10 @@ Redis 使用延迟连接，连接失败时不会阻止进程启动。历史热�
 | `BRIEF_ENABLED` | `false` | 启动应用时是否启用简报调度 |
 | `BRIEF_CRON_EXPRESSION` | `0 12 * * *` | 简报生成 Cron 表达式 |
 | `BRIEF_TIMEZONE` | `Asia/Shanghai` | 简报日期和 Cron 时区 |
-| `BRIEF_SOURCES` | `cls,yicai,...` | 参与简报的热榜来源 |
+| `BRIEF_SOURCES` | `cls,yicai,...` | 参与简报的热榜来源，需在 `source_configs` 中处于启用状态 |
 | `BRIEF_LOOKBACK_HOURS` | `24` | 历史热点回看窗口，单位小时 |
 | `BRIEF_TOP_ITEMS_PER_SOURCE` | `10` | 每个来源最多参与分析的条目数 |
-| `BRIEF_MAX_TOPICS` | `12` | 最多搜索增强的候选主题数 |
+| `BRIEF_MAX_TOPICS` | `12` | 最多搜索增强的候选主题数，取值 1–12，上限由提示词预算决定 |
 | `BRIEF_STOCK_RANKING_CACHE_TTL` | `43200` | 股票历史排名缓存秒数 |
 | `BRIEF_GENERATING_TIMEOUT_MINUTES` | `30` | 生成尝试的过期阈值，单位分钟 |
 | `BRIEF_SOURCE_CONCURRENCY` | `3` | 简报刷新源的最大并发数 |
