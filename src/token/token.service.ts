@@ -1,5 +1,4 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { CacheService } from '../cache/cache.service';
 import { HttpClientService } from '../http/http.service';
 import md5 from 'md5';
 
@@ -25,8 +24,16 @@ interface BilibiliNavResponse {
 @Injectable()
 export class TokenService {
   private readonly logger = new Logger(TokenService.name);
-  private readonly CACHE_KEY = 'bilibili-wbi';
-  private readonly CACHE_TTL = 3600; // 1 hour cache
+  private readonly wbiNavRequest = {
+    url: 'https://api.bilibili.com/x/web-interface/nav',
+    headers: {
+      Cookie: 'SESSDATA=xxxxxx',
+      'User-Agent':
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36',
+      Referer: 'https://www.bilibili.com/',
+    },
+    ttl: 1800,
+  };
 
   // WBI 签名混淆参数表
   private readonly mixinKeyEncTab = [
@@ -36,10 +43,7 @@ export class TokenService {
     36, 20, 34, 44, 52,
   ];
 
-  constructor(
-    private readonly cacheService: CacheService,
-    private readonly httpClientService: HttpClientService,
-  ) {}
+  constructor(private readonly httpClientService: HttpClientService) {}
 
   /**
    * 对 imgKey 和 subKey 进行字符顺序打乱编码
@@ -60,7 +64,7 @@ export class TokenService {
     const chr_filter = /[!'()*]/g;
 
     // 添加 wts 字段
-    Object.assign(params, { wts: curr_time });
+    params = { ...params, wts: curr_time };
 
     // 按照 key 重排参数
     const query = Object.keys(params)
@@ -83,15 +87,7 @@ export class TokenService {
   private async getWbiKeys(): Promise<EncodedKeys> {
     try {
       const response = await this.httpClientService.get<BilibiliNavResponse>({
-        url: 'https://api.bilibili.com/x/web-interface/nav',
-        headers: {
-          // SESSDATA 字段，实际使用时需要配置有效的 Cookie
-          Cookie: 'SESSDATA=xxxxxx',
-          'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36',
-          Referer: 'https://www.bilibili.com/',
-        },
-        ttl: 1800, // 30分钟缓存
+        ...this.wbiNavRequest,
       });
 
       const img_url: string = response.data?.data?.wbi_img?.img_url ?? '';
@@ -124,14 +120,7 @@ export class TokenService {
    */
   async getBiliWbi(customParams?: WbiParams): Promise<string> {
     try {
-      // 尝试从缓存获取
-      const cachedData = await this.cacheService.get<string>(this.CACHE_KEY);
-      if (cachedData) {
-        this.logger.log(`📦 [Cache] Using cached Bilibili WBI signature`);
-        return cachedData;
-      }
-
-      // 获取 WBI keys
+      // nav 响应由 HTTP 客户端缓存；签名依赖参数和当前时间，必须每次重新计算。
       const web_keys = await this.getWbiKeys();
 
       // 使用自定义参数或默认测试参数
@@ -140,14 +129,6 @@ export class TokenService {
       // 生成签名
       const query = this.encWbi(params, web_keys.img_key, web_keys.sub_key);
 
-      // 缓存结果
-      await this.cacheService.set(
-        this.CACHE_KEY,
-        { data: query, updateTime: new Date().toISOString() },
-        this.CACHE_TTL,
-      );
-
-      this.logger.log(`🔑 [Bilibili] Generated new WBI signature`);
       return query;
     } catch (error) {
       this.logger.error('Failed to generate Bilibili WBI signature', error);
@@ -159,8 +140,7 @@ export class TokenService {
    * 清除 Bilibili WBI 缓存
    */
   async clearBiliWbiCache(): Promise<void> {
-    await this.cacheService.del(this.CACHE_KEY);
-    this.logger.log(`🗑️ [Cache] Cleared Bilibili WBI cache`);
+    await this.httpClientService.invalidateGet(this.wbiNavRequest);
   }
 
   /**
@@ -189,7 +169,6 @@ export class TokenService {
     }>({
       url,
     });
-    console.log('51cto response', response);
     const token = response.data?.data?.data?.token;
     return token;
   }

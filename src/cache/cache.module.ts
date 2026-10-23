@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Logger, Module } from '@nestjs/common';
 import { CacheService } from './cache.service';
 import { RedisModule as NestRedisModule } from '@nestjs-modules/ioredis';
 import { ConfigModule, ConfigService } from '@nestjs/config';
@@ -20,11 +20,13 @@ import { CacheModule as NestCacheModule } from '@nestjs/cache-manager';
           enableReadyCheck: false,
           retryStrategy: () => null,
         },
-        onClientReady: (client) => {
-          console.log('Redis client ready', client);
+        onClientReady: () => {
+          new Logger(CacheModule.name).log('Redis client ready');
         },
         onClientError: (error) => {
-          console.error('Redis client error', error);
+          new Logger(CacheModule.name).error(
+            `Redis client error: ${error.message}`,
+          );
         },
       }),
     }),

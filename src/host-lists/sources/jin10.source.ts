@@ -43,7 +43,7 @@ export class Jin10Source implements HotListSource {
           desc: v?.introduction,
           author: undefined,
           timestamp: getTime(v.display_datetime),
-          hot: null,
+          hot: undefined,
           url: v?.source_url
             ? v.source_url
             : `https://xnews.jin10.com/details/${v.id}`,

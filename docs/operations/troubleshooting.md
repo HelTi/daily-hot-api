@@ -24,7 +24,7 @@ PORT=6699 BRIEF_ENABLED=false npm run start:prod
 ## 健康检查 degraded
 
 ```bash
-curl http://localhost:6688/health
+curl http://localhost:6689/health
 ```
 
 如果 `checks.redis` 为 `false`：
@@ -63,14 +63,14 @@ MONGODB_URI=mongodb://mongodb:27017/daily-hot-api
 - 使用 `noCache=true` 重试；受保护来源会忽略强刷参数。
 
 ```bash
-curl 'http://localhost:6688/hot-lists/zhihu?noCache=true'
+curl 'http://localhost:6689/hot-lists/zhihu?noCache=true'
 ```
 
 ## 定时任务没有运行
 
 ```bash
-curl http://localhost:6688/api/scheduler/status
-curl http://localhost:6688/api/briefs/scheduler/status
+curl http://localhost:6689/api/scheduler/status
+curl http://localhost:6689/api/briefs/scheduler/status
 ```
 
 确认：
@@ -94,7 +94,7 @@ curl http://localhost:6688/api/briefs/scheduler/status
 测试时减少成本和等待时间：
 
 ```bash
-curl -X POST http://localhost:6688/api/briefs/generate \
+curl -X POST http://localhost:6689/api/briefs/generate \
   -H 'Content-Type: application/json' \
   -d '{"sources":["cls"],"period":"manual-test","force":true}'
 ```

@@ -24,11 +24,14 @@ make deploy
 | MongoDB | `localhost:27017` |
 | Redis | `localhost:6380` |
 
+Compose 默认把三个端口绑定到 `127.0.0.1`，远程访问 API 请通过受控反向代理。不要把数据库端口直接发布到公网；示例网关规则见[网关与端口](/operations/gateway)。
+
 检查状态：
 
 ```bash
 docker compose ps
 curl http://localhost:6689/health
+curl http://localhost:6689/ready
 ```
 
 查看日志：
@@ -70,8 +73,8 @@ docker pull ghcr.io/helti/daily-hot-api:latest
 docker run -d \
   --name daily-hot-api \
   --restart unless-stopped \
-  -p 6688:6688 \
-  -e PORT=6688 \
+  -p 127.0.0.1:6689:6689 \
+  -e PORT=6689 \
   -e REDIS_HOST=host.docker.internal \
   -e MONGODB_URI=mongodb://host.docker.internal:27017/daily-hot-api \
   ghcr.io/helti/daily-hot-api:latest

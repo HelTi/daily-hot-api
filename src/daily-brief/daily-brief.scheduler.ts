@@ -61,8 +61,7 @@ export class DailyBriefScheduler implements OnModuleInit, OnModuleDestroy {
   }
 
   reconfigure() {
-    // 重新读取配置，使其与 cron 表达式、时区一样跟随配置变化
-    this.enabled = this.config.enabled;
+    // 只重建当前进程的 Cron，不覆盖运行期的 start/stop 状态。
     this.setupCronJob();
   }
 
@@ -115,7 +114,7 @@ export class DailyBriefScheduler implements OnModuleInit, OnModuleDestroy {
 
     this.isRunning = true;
     try {
-      await this.dailyBriefService.generateBrief({ force: true });
+      await this.dailyBriefService.generateBrief();
     } catch (error) {
       this.logger.error('Daily brief generation failed:', error);
     } finally {

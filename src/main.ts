@@ -6,11 +6,19 @@ import { ValidationPipe } from '@nestjs/common';
 import { join } from 'path';
 
 process.on('unhandledRejection', (reason) => {
-  console.error('Unhandled Rejection:', reason);
+  const name = reason instanceof Error ? reason.name : typeof reason;
+  if (
+    name === 'MongoTopologyClosedError' ||
+    name === 'MongoServerSelectionError'
+  ) {
+    console.warn(`MongoDB connection unavailable: ${name}`);
+    return;
+  }
+  console.error(`Unhandled Rejection: ${name}`);
+  process.exit(1);
 });
 
 process.on('uncaughtException', (error) => {
-  console.error('Uncaught Exception:', error);
   if (
     error.name === 'MongoTopologyClosedError' ||
     error.name === 'MongoServerSelectionError'
@@ -20,10 +28,13 @@ process.on('uncaughtException', (error) => {
     );
     return;
   }
+  console.error(`Uncaught Exception: ${error.name}: ${error.message}`);
+  process.exit(1);
 });
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  app.enableShutdownHooks();
 
   // 启用全局验证管道，支持 class-transformer
   app.useGlobalPipes(
@@ -47,7 +58,7 @@ async function bootstrap() {
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   });
 
-  const port = process.env.PORT ?? 6688;
+  const port = config.getOrThrow<number>('PORT');
   await app.listen(port);
   console.log(`Server is running on port http://localhost:${port}`);
 }

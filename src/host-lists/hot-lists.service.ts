@@ -44,9 +44,17 @@ export class HotListsService implements OnModuleInit {
 
           if (metadata && this.isHotListSource(provider.instance)) {
             const { name, title, type, link, description } = metadata;
+            if (this.sources.has(name)) {
+              throw new Error(`Duplicate hot list source name: ${name}`);
+            }
             // 注册源
             this.sources.set(name, provider.instance);
-            this.sourceMetadata.set(name, { title, type, link, description });
+            this.sourceMetadata.set(name, {
+              title,
+              type: type ?? '热榜',
+              link,
+              description,
+            });
             this.logger.log(`Registered hot list source: ${name} - ${title}`);
           }
         }
@@ -97,37 +105,10 @@ export class HotListsService implements OnModuleInit {
     options: GetListOptions,
     noCache: boolean = false,
   ): Promise<RouterData> {
-    const source = this.sources.get(sourceName);
-
-    if (!source) {
-      throw new NotFoundException(`Source '${sourceName}' not found`);
-    }
-
     try {
-      // 在请求中设置了noCache参数时，一定不会使用缓存
-      // 当没有设置noCache时，可能使用缓存，这由源的实现决定
-      const result = await source.getList(options, noCache);
-      const metadata = this.sourceMetadata.get(sourceName);
-
-      // 检查结果是否来自HttpClientService的缓存
-      const fromCache = result.fromCache ?? !noCache;
-
-      // 构建结果数据
-      const routerData: RouterData = {
-        name: sourceName,
-        title: metadata?.title || sourceName,
-        type: result.type || metadata?.type || '热榜',
-        link: metadata?.link,
-        description: metadata?.description,
-        total: result.data.length,
-        data: result.data,
-        fromCache, // 使用从源数据中提取或推断的缓存状态
-        updateTime: result?.updateTime ?? new Date().toISOString(),
-        params: result.params,
-      };
-
-      return routerData;
+      return await this.fetchSource(sourceName, options, noCache);
     } catch (error: unknown) {
+      if (error instanceof NotFoundException) throw error;
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
 
@@ -150,5 +131,31 @@ export class HotListsService implements OnModuleInit {
         message: `Failed to get data: ${errorMessage}`,
       };
     }
+  }
+
+  /** 内部抓取入口：保留错误，供调度和简报判断失败并重试。 */
+  async fetchSource(
+    sourceName: string,
+    options: GetListOptions,
+    noCache = false,
+  ): Promise<RouterData> {
+    const source = this.sources.get(sourceName);
+    if (!source)
+      throw new NotFoundException(`Source '${sourceName}' not found`);
+
+    const result = await source.getList(options, noCache);
+    const metadata = this.sourceMetadata.get(sourceName);
+    return {
+      name: sourceName,
+      title: metadata?.title || sourceName,
+      type: result.type || metadata?.type || '热榜',
+      link: metadata?.link,
+      description: metadata?.description,
+      total: result.data.length,
+      data: result.data,
+      fromCache: result.fromCache ?? false,
+      updateTime: result.updateTime ?? new Date().toISOString(),
+      params: result.params,
+    };
   }
 }

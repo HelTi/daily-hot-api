@@ -59,6 +59,10 @@ export default defineConfig({
               text: '每日简报前端接入',
               link: '/development/daily-brief-frontend',
             },
+            {
+              text: '架构评审与优化建议',
+              link: '/development/architecture-review',
+            },
           ],
         },
         {

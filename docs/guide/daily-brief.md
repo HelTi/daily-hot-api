@@ -11,13 +11,16 @@
   -> 读取 BRIEF_SOURCES
   -> 刷新热点源数据并保存历史
   -> 读取最近 BRIEF_LOOKBACK_HOURS 的热点
-  -> Tavily 搜索补充背景材料
+  -> 按来源交错选择候选，去掉跨来源同标题主题
+  -> Tavily 搜索补充背景材料（有结果的查询缓存 1 小时）
   -> OpenAI SDK 生成结构化 JSON 和 Markdown
   -> 保存到 MongoDB
   -> API 返回前端可用的简报内容
 ```
 
 默认面向前端的响应不会返回 `rawInputItems` 和 `searchEvidence`。这两个字段仍会保存到数据库，用于后端排查和审计，需要显式传 `includeDebug=true` 才会返回。
+
+每个来源先取配置的前 N 条，再交错放入 AI 输入，避免一个来源按时间排序后占满候选。Tavily 搜索最多选择 `BRIEF_MAX_TOPICS` 个不同标题，提示词预算将其进一步限制到 12 个；送入模型的条目、描述和搜索摘要还会截断，原始输入仍保留在数据库调试字段中。
 
 ## 环境变量
 
@@ -94,10 +97,14 @@ TAVILY_TIMEOUT_MS=10000
   model: string;
   tavilyUsed: boolean;
   error?: string;
+  generationId?: string;
+  generationHeartbeatAt?: Date;
 }
 ```
 
 `briefDate + period` 有唯一索引，用于避免同一天同一类型简报重复写入。
+
+生成时使用原子 claim 和 `generationId` 防止并发任务互相覆盖，心跳用于识别失联任务。超过 `BRIEF_GENERATING_TIMEOUT_MINUTES` 后，旧任务的结果也不能覆盖新任务。强制重新生成已有成功简报时，失败会保留先前的成功内容。普通响应隐藏原始输入、搜索证据和生成状态字段；调试时可以使用 `includeDebug=true`。
 
 `analysis` 里包含：
 
@@ -113,7 +120,7 @@ TAVILY_TIMEOUT_MS=10000
 基础地址示例：
 
 ```text
-http://localhost:6688
+http://localhost:6689
 ```
 
 ::: warning 写接口没有内建鉴权
@@ -132,7 +139,7 @@ http://localhost:6688
 ### 获取简报配置
 
 ```bash
-curl http://localhost:6688/api/briefs/config
+curl http://localhost:6689/api/briefs/config
 ```
 
 响应示例：
@@ -157,7 +164,7 @@ curl http://localhost:6688/api/briefs/config
 生成正式日报：
 
 ```bash
-curl -X POST http://localhost:6688/api/briefs/generate \
+curl -X POST http://localhost:6689/api/briefs/generate \
   -H 'Content-Type: application/json' \
   -d '{"force":true}'
 ```
@@ -165,7 +172,7 @@ curl -X POST http://localhost:6688/api/briefs/generate \
 指定数据源和 period，用于测试：
 
 ```bash
-curl -X POST http://localhost:6688/api/briefs/generate \
+curl -X POST http://localhost:6689/api/briefs/generate \
   -H 'Content-Type: application/json' \
   -d '{"sources":["cls"],"period":"manual-test","force":true}'
 ```
@@ -184,7 +191,7 @@ curl -X POST http://localhost:6688/api/briefs/generate \
 ### 获取最新简报
 
 ```bash
-curl http://localhost:6688/api/briefs/latest
+curl http://localhost:6689/api/briefs/latest
 ```
 
 不传 `period` 时，返回所有成功简报中最新的一条。
@@ -192,49 +199,49 @@ curl http://localhost:6688/api/briefs/latest
 只获取正式日报：
 
 ```bash
-curl 'http://localhost:6688/api/briefs/latest?period=daily'
+curl 'http://localhost:6689/api/briefs/latest?period=daily'
 ```
 
 获取调试字段：
 
 ```bash
-curl 'http://localhost:6688/api/briefs/latest?includeDebug=true'
+curl 'http://localhost:6689/api/briefs/latest?includeDebug=true'
 ```
 
 ### 获取指定日期简报
 
 ```bash
-curl 'http://localhost:6688/api/briefs/2026-07-05'
+curl 'http://localhost:6689/api/briefs/2026-07-05'
 ```
 
 指定 period：
 
 ```bash
-curl 'http://localhost:6688/api/briefs/2026-07-05?period=manual-test'
+curl 'http://localhost:6689/api/briefs/2026-07-05?period=manual-test'
 ```
 
 包含调试字段：
 
 ```bash
-curl 'http://localhost:6688/api/briefs/2026-07-05?period=manual-test&includeDebug=true'
+curl 'http://localhost:6689/api/briefs/2026-07-05?period=manual-test&includeDebug=true'
 ```
 
 ### 分页查询简报
 
 ```bash
-curl 'http://localhost:6688/api/briefs?page=1&limit=10'
+curl 'http://localhost:6689/api/briefs?page=1&limit=10'
 ```
 
 按 period 查询：
 
 ```bash
-curl 'http://localhost:6688/api/briefs?period=daily&page=1&limit=10'
+curl 'http://localhost:6689/api/briefs?period=daily&page=1&limit=10'
 ```
 
 按状态查询：
 
 ```bash
-curl 'http://localhost:6688/api/briefs?status=success'
+curl 'http://localhost:6689/api/briefs?status=success'
 ```
 
 ### 获取历史股票出现次数排名
@@ -242,13 +249,13 @@ curl 'http://localhost:6688/api/briefs?status=success'
 统计成功简报中 `analysis.topics[].aShareMapping[]` 的股票出现次数，并按次数从高到低返回排名：
 
 ```bash
-curl 'http://localhost:6688/api/briefs/statistics/stocks'
+curl 'http://localhost:6689/api/briefs/statistics/stocks'
 ```
 
 支持按 `period`、简报日期范围和返回数量筛选：
 
 ```bash
-curl 'http://localhost:6688/api/briefs/statistics/stocks?period=daily&startDate=2026-01-01&endDate=2026-07-18&limit=20'
+curl 'http://localhost:6689/api/briefs/statistics/stocks?period=daily&startDate=2026-01-01&endDate=2026-07-18&limit=20'
 ```
 
 接口按完整查询条件缓存结果，默认缓存 12 小时。缓存复用现有缓存模块（Redis 不可用时降级为进程内存缓存）；成功生成简报或实际删除简报后，会清理股票排名缓存（生成失败不会清，因为排名数据没有变化）。
@@ -323,13 +330,13 @@ AI 给出的 `aShareMapping` 里，同一家公司在不同简报中可能写法
 删除某一天所有 period 的简报：
 
 ```bash
-curl -X DELETE http://localhost:6688/api/briefs/2026-07-05
+curl -X DELETE http://localhost:6689/api/briefs/2026-07-05
 ```
 
 只删除某一天的指定 period：
 
 ```bash
-curl -X DELETE 'http://localhost:6688/api/briefs/2026-07-05?period=manual-test'
+curl -X DELETE 'http://localhost:6689/api/briefs/2026-07-05?period=manual-test'
 ```
 
 响应示例：
@@ -349,26 +356,26 @@ curl -X DELETE 'http://localhost:6688/api/briefs/2026-07-05?period=manual-test'
 
 ```bash
 # 删除早于 1 个月前的简报
-curl -X DELETE 'http://localhost:6688/api/briefs/history?olderThan=1m'
+curl -X DELETE 'http://localhost:6689/api/briefs/history?olderThan=1m'
 
 # 删除早于 1 年前的简报
-curl -X DELETE 'http://localhost:6688/api/briefs/history?olderThan=1y'
+curl -X DELETE 'http://localhost:6689/api/briefs/history?olderThan=1y'
 
 # 删除早于 30 天前的简报
-curl -X DELETE 'http://localhost:6688/api/briefs/history?olderThan=30d'
+curl -X DELETE 'http://localhost:6689/api/briefs/history?olderThan=30d'
 ```
 
 按截止日期清理：
 
 ```bash
 # 删除 briefDate 小于 2025-07-05 的简报
-curl -X DELETE 'http://localhost:6688/api/briefs/history?beforeDate=2025-07-05'
+curl -X DELETE 'http://localhost:6689/api/briefs/history?beforeDate=2025-07-05'
 ```
 
 只清理指定 period：
 
 ```bash
-curl -X DELETE 'http://localhost:6688/api/briefs/history?olderThan=1y&period=daily'
+curl -X DELETE 'http://localhost:6689/api/briefs/history?olderThan=1y&period=daily'
 ```
 
 响应示例：
@@ -394,7 +401,7 @@ curl -X DELETE 'http://localhost:6688/api/briefs/history?olderThan=1y&period=dai
 ### 简报调度状态
 
 ```bash
-curl http://localhost:6688/api/briefs/scheduler/status
+curl http://localhost:6689/api/briefs/scheduler/status
 ```
 
 响应示例：
@@ -414,19 +421,19 @@ curl http://localhost:6688/api/briefs/scheduler/status
 启动：
 
 ```bash
-curl -X POST http://localhost:6688/api/briefs/scheduler/start
+curl -X POST http://localhost:6689/api/briefs/scheduler/start
 ```
 
 停止：
 
 ```bash
-curl -X POST http://localhost:6688/api/briefs/scheduler/stop
+curl -X POST http://localhost:6689/api/briefs/scheduler/stop
 ```
 
 重新加载 cron 配置：
 
 ```bash
-curl -X POST http://localhost:6688/api/briefs/scheduler/reconfigure
+curl -X POST http://localhost:6689/api/briefs/scheduler/reconfigure
 ```
 
 ## 前端响应字段
@@ -472,19 +479,19 @@ curl -X POST http://localhost:6688/api/briefs/scheduler/reconfigure
 检查服务健康：
 
 ```bash
-curl http://localhost:6688/health
+curl http://localhost:6689/health
 ```
 
 检查配置：
 
 ```bash
-curl http://localhost:6688/api/briefs/config
+curl http://localhost:6689/api/briefs/config
 ```
 
 用财联社单源生成测试简报：
 
 ```bash
-curl -X POST http://localhost:6688/api/briefs/generate \
+curl -X POST http://localhost:6689/api/briefs/generate \
   -H 'Content-Type: application/json' \
   -d '{"sources":["cls"],"period":"manual-test","force":true}'
 ```
@@ -492,7 +499,7 @@ curl -X POST http://localhost:6688/api/briefs/generate \
 验证默认不返回调试字段：
 
 ```bash
-curl -s http://localhost:6688/api/briefs/latest | node -e '
+curl -s http://localhost:6689/api/briefs/latest | node -e '
 let s="";
 process.stdin.on("data", d => s += d);
 process.stdin.on("end", () => {
@@ -508,7 +515,7 @@ process.stdin.on("end", () => {
 验证调试字段可按需返回：
 
 ```bash
-curl -s 'http://localhost:6688/api/briefs/latest?includeDebug=true' | node -e '
+curl -s 'http://localhost:6689/api/briefs/latest?includeDebug=true' | node -e '
 let s="";
 process.stdin.on("data", d => s += d);
 process.stdin.on("end", () => {

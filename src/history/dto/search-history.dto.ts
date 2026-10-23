@@ -4,6 +4,7 @@ import {
   IsNumber,
   IsDateString,
   IsIn,
+  MaxLength,
   Min,
   Max,
 } from 'class-validator';
@@ -16,6 +17,7 @@ export class SearchHistoryDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   keyword?: string;
 
   @IsOptional()

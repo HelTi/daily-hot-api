@@ -1,4 +1,11 @@
-import { Controller, Get, Render } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Render,
+  ServiceUnavailableException,
+} from '@nestjs/common';
+import { InjectConnection } from '@nestjs/mongoose';
+import { Connection, ConnectionStates } from 'mongoose';
 import { AppService } from './app.service';
 import { CacheService } from './cache/cache.service';
 
@@ -7,6 +14,7 @@ export class AppController {
   constructor(
     private readonly appService: AppService,
     private readonly cacheService: CacheService,
+    @InjectConnection() private readonly mongoConnection: Connection,
   ) {}
 
   @Get()
@@ -34,11 +42,23 @@ export class AppController {
     try {
       // 检查 Redis 连接
       health.checks.redis = await this.cacheService.ping();
+      if (!health.checks.redis) health.status = 'degraded';
     } catch {
       health.checks.redis = false;
       health.status = 'degraded';
     }
 
     return health;
+  }
+
+  @Get('ready')
+  getReadiness() {
+    if (this.mongoConnection.readyState !== ConnectionStates.connected) {
+      throw new ServiceUnavailableException({
+        status: 'not_ready',
+        checks: { mongodb: false },
+      });
+    }
+    return { status: 'ready', checks: { mongodb: true } };
   }
 }

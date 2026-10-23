@@ -3,6 +3,11 @@ import { Document, Schema as MongooseSchema } from 'mongoose';
 
 export type DailyBriefDocument = DailyBrief & Document;
 
+const InputWindowSchema = new MongooseSchema(
+  { start: Date, end: Date, lookbackHours: Number },
+  { _id: false },
+);
+
 @Schema({
   timestamps: true,
 })
@@ -24,13 +29,7 @@ export class DailyBrief {
   @Prop({ type: [String], default: [] })
   sources: string[];
 
-  @Prop({
-    type: {
-      start: Date,
-      end: Date,
-      lookbackHours: Number,
-    },
-  })
+  @Prop({ type: InputWindowSchema })
   inputWindow: {
     start: Date;
     end: Date;
@@ -57,6 +56,12 @@ export class DailyBrief {
 
   @Prop()
   error?: string;
+
+  @Prop()
+  generationId?: string;
+
+  @Prop()
+  generationHeartbeatAt?: Date;
 
   @Prop()
   createdAt?: Date;

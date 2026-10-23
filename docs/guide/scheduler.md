@@ -16,30 +16,36 @@ IGNORE_SAVE_SOURCES=v2ex,github
 
 ```bash
 # 查看状态
-curl http://localhost:6688/api/scheduler/status
+curl http://localhost:6689/api/scheduler/status
 
 # 启动
-curl -X POST http://localhost:6688/api/scheduler/start
+curl -X POST http://localhost:6689/api/scheduler/start
 
 # 停止
-curl -X POST http://localhost:6688/api/scheduler/stop
+curl -X POST http://localhost:6689/api/scheduler/stop
 
 # 重新加载 Cron 配置
-curl -X POST http://localhost:6688/api/scheduler/reconfigure
+curl -X POST http://localhost:6689/api/scheduler/reconfigure
 ```
 
 手动触发全部来源：
 
 ```bash
-curl -X POST http://localhost:6688/api/scheduler/trigger
+curl -X POST http://localhost:6689/api/scheduler/trigger
 ```
 
 手动触发单个来源：
 
 ```bash
-curl -X POST http://localhost:6688/api/scheduler/trigger \
+curl -X POST http://localhost:6689/api/scheduler/trigger \
   -H 'Content-Type: application/json' \
   -d '{"source":"zhihu"}'
+```
+
+手动触发立即返回 `202` 和 `runId`。用 `GET /api/scheduler/runs/:runId` 查询 `running`、`completed` 或 `failed`，完成后可看到各来源的成功状态、数量和错误；接口不会返回抓取的完整条目。记录只保存在接收请求的进程内，最多保留一小时，重启后消失。多实例部署时应通过同一实例查询任务状态。
+
+```bash
+curl http://localhost:6689/api/scheduler/runs/<runId>
 ```
 
 ## 来源级配置
@@ -47,23 +53,23 @@ curl -X POST http://localhost:6688/api/scheduler/trigger \
 来源配置保存在 MongoDB，包括是否启用、抓取间隔和最后抓取时间。
 
 ```bash
-curl http://localhost:6688/api/scheduler/configs
+curl http://localhost:6689/api/scheduler/configs
 ```
 
 修改知乎的配置：
 
 ```bash
-curl -X PUT http://localhost:6688/api/scheduler/config/zhihu \
+curl -X PUT http://localhost:6689/api/scheduler/config/zhihu \
   -H 'Content-Type: application/json' \
   -d '{"enabled":true,"interval":30}'
 ```
 
-`interval` 单位是分钟。修改后可调用 `/api/scheduler/reconfigure` 让动态任务重新加载。
+`interval` 单位是分钟，允许 1–10080。每次全局 Cron 触发时，调度器只抓取距上次成功刷新已达到来源间隔的源。修改间隔后在下一次 Cron 自动生效；手动触发不受间隔限制。`reconfigure` 只重新注册当前进程中的 Cron，不会重新读取 `.env`。
 
 查看不会写入历史数据库的来源：
 
 ```bash
-curl http://localhost:6688/api/scheduler/ignored-sources
+curl http://localhost:6689/api/scheduler/ignored-sources
 ```
 
 ## 每日简报调度器
@@ -79,10 +85,10 @@ BRIEF_TIMEZONE=Asia/Shanghai
 运行时控制：
 
 ```bash
-curl http://localhost:6688/api/briefs/scheduler/status
-curl -X POST http://localhost:6688/api/briefs/scheduler/start
-curl -X POST http://localhost:6688/api/briefs/scheduler/stop
-curl -X POST http://localhost:6688/api/briefs/scheduler/reconfigure
+curl http://localhost:6689/api/briefs/scheduler/status
+curl -X POST http://localhost:6689/api/briefs/scheduler/start
+curl -X POST http://localhost:6689/api/briefs/scheduler/stop
+curl -X POST http://localhost:6689/api/briefs/scheduler/reconfigure
 ```
 
 简报调度会调用外部热榜、Tavily 和模型服务。开发环境建议保持 `BRIEF_ENABLED=false`，需要时使用手动生成接口。

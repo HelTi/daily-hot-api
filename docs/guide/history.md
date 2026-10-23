@@ -21,7 +21,7 @@ MONGODB_URI=mongodb://localhost:27017/daily-hot-api
 
 ### 数据库集合
 
-- `hot_items`: 存储热点数据
+- `hotitems`: 存储热点数据（Mongoose 默认集合名）
 - `source_configs`: 存储数据源配置
 
 ## API 接口
@@ -43,9 +43,11 @@ GET /api/history/search
 - `sortBy`: 排序字段，可选值：timestamp, title, createdAt（可选）
 - `sortOrder`: 排序方向，可选值：asc, desc（可选）
 
+`keyword` 最多 100 个字符，按普通文本匹配标题和描述；正则元字符不会改变搜索含义。
+
 示例：
 ```bash
-curl "http://localhost:6688/api/history/search?source=zhihu&keyword=AI&page=1&limit=10"
+curl "http://localhost:6689/api/history/search?source=zhihu&keyword=AI&page=1&limit=10"
 ```
 
 #### 获取数据源列表
@@ -62,6 +64,10 @@ GET /api/history/stats
 ```
 GET /api/history/latest?source=zhihu&limit=20
 ```
+
+`limit` 默认 50，允许 1–100，超出范围返回 400。
+
+`/api/history/stats` 在每个进程内缓存最多 30 秒；本进程新增历史记录时立即失效，其他实例的写入最迟在缓存过期后可见。
 
 #### 根据时间范围获取数据
 ```
@@ -160,12 +166,12 @@ npm run start:dev
 
 ### 2. 查看定时任务状态
 ```bash
-curl http://localhost:6688/api/scheduler/status
+curl http://localhost:6689/api/scheduler/status
 ```
 
 ### 3. 手动触发数据抓取
 ```bash
-curl -X POST http://localhost:6688/api/scheduler/trigger \
+curl -X POST http://localhost:6689/api/scheduler/trigger \
   -H "Content-Type: application/json" \
   -d '{"source": "zhihu"}'
 ```
@@ -173,18 +179,18 @@ curl -X POST http://localhost:6688/api/scheduler/trigger \
 ### 4. 查询历史数据
 ```bash
 # 查询知乎的热点数据
-curl "http://localhost:6688/api/history/search?source=zhihu&page=1&limit=10"
+curl "http://localhost:6689/api/history/search?source=zhihu&page=1&limit=10"
 
 # 搜索包含"AI"关键词的数据
-curl "http://localhost:6688/api/history/search?keyword=AI&page=1&limit=10"
+curl "http://localhost:6689/api/history/search?keyword=AI&page=1&limit=10"
 
 # 查询特定时间范围的数据
-curl "http://localhost:6688/api/history/search?startDate=2024-01-01&endDate=2024-01-31"
+curl "http://localhost:6689/api/history/search?startDate=2024-01-01&endDate=2024-01-31"
 ```
 
 ### 5. 查看数据统计
 ```bash
-curl http://localhost:6688/api/history/stats
+curl http://localhost:6689/api/history/stats
 ```
 
 ## 配置说明

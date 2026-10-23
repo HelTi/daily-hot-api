@@ -13,8 +13,8 @@ const typeMap: Record<string, string> = {
   car: '汽车',
 };
 
-const setDesc = (desc: string[] | string) => {
-  return Array.isArray(desc) ? desc.join('\n') : desc;
+const setDesc = (desc?: string[] | string) => {
+  return Array.isArray(desc) ? desc.join('\n') : (desc ?? '');
 };
 
 @Injectable()

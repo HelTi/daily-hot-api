@@ -202,7 +202,7 @@ sh deploy-pm2.sh
 $ docker build -t daily-hot-api .
 
 # 运行容器
-$ docker run -p 6688:6688 daily-hot-api
+$ docker run -p 6689:6689 daily-hot-api
 ```
 或者使用 make 命令：
 
@@ -217,7 +217,7 @@ docker pull ttkit/daily-hot-api:latest
 # 或者使用github的镜像源拉取镜像
 docker pull ghcr.io/helti/daily-hot-api:latest
 # 运行
-docker run --restart always -p 6688:6688 -d ttkit/daily-hot-api:latest
+docker run --restart always -p 6689:6689 -d ttkit/daily-hot-api:latest
 ```
 
 启用完整服务：
@@ -254,7 +254,6 @@ docker run -d --name daily-hot-api \
 | `MONGODB_URI` | MongoDB 连接字符串 | `` |
 | `SCHEDULER_AUTO_START` | 是否自动启动定时抓取任务 | `false` |
 | `SCHEDULER_CRON_EXPRESSION` | 定时抓取任务 Cron 表达式 | `0 */12 * * *` |
-| `BACKUP_CRON_EXPRESSION` | 定时备份任务 Cron 表达式 | `0 1 * * *` |
 
 更多配置查看 .env.example
 

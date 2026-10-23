@@ -1,5 +1,76 @@
 import { DailyBriefRepository } from './daily-brief.repository';
 
+describe('DailyBriefRepository generation fencing', () => {
+  const findOneAndUpdate = jest.fn();
+  const repository = new DailyBriefRepository({ findOneAndUpdate } as never);
+  const leanResult = (value: unknown) => ({
+    lean: () => Promise.resolve(value),
+  });
+
+  beforeEach(() => findOneAndUpdate.mockReset());
+
+  it('atomically claims a missing or stale generation', async () => {
+    findOneAndUpdate.mockReturnValue(leanResult({ generationId: 'run-1' }));
+    const staleBefore = new Date('2026-10-22T00:00:00Z');
+
+    await expect(
+      repository.claimGeneration({
+        briefDate: '2026-10-22',
+        period: 'daily',
+        sources: ['cls'],
+        inputWindow: {
+          start: staleBefore,
+          end: staleBefore,
+          lookbackHours: 24,
+        },
+        generationId: 'run-1',
+        staleBefore,
+      }),
+    ).resolves.toBe(true);
+
+    const [filter, update, options] = findOneAndUpdate.mock.calls[0];
+    expect(filter).toMatchObject({
+      briefDate: '2026-10-22',
+      period: 'daily',
+      $or: expect.arrayContaining([
+        { generationHeartbeatAt: { $lt: staleBefore } },
+      ]),
+    });
+    expect(update.$set).toMatchObject({ generationId: 'run-1' });
+    expect(update.$set.status).toBeUndefined();
+    expect(options.upsert).toBe(true);
+  });
+
+  it('requires the active generation ID before publishing success', async () => {
+    findOneAndUpdate.mockReturnValue(leanResult({ status: 'success' }));
+    await repository.markSuccess('2026-10-22', 'daily', 'run-1', {
+      analysis: { summary: 'ok' },
+      markdown: 'ok',
+      rawInputItems: [],
+      searchEvidence: [],
+      tavilyUsed: false,
+      sources: ['cls'],
+      inputWindow: { start: new Date(), end: new Date(), lookbackHours: 24 },
+    });
+    const [filter, update] = findOneAndUpdate.mock.calls[0];
+    expect(filter).toEqual({
+      briefDate: '2026-10-22',
+      period: 'daily',
+      generationId: 'run-1',
+    });
+    expect(update.$unset).toMatchObject({ error: 1, generationId: 1 });
+  });
+
+  it('keeps an earlier successful brief when a forced generation fails', async () => {
+    findOneAndUpdate.mockReturnValue(leanResult({ status: 'success' }));
+    await repository.markFailed('2026-10-22', 'daily', 'run-2', 'AI failed');
+    expect(findOneAndUpdate).toHaveBeenCalledTimes(1);
+    const [filter, update] = findOneAndUpdate.mock.calls[0];
+    expect(filter.status).toBe('success');
+    expect(update.$set).toBeUndefined();
+  });
+});
+
 describe('DailyBriefRepository stock ranking', () => {
   const aggregate = jest.fn();
   const countDocuments = jest.fn();

@@ -10,7 +10,7 @@ show_help() {
     echo "选项:"
     echo "  list      列出所有卷"
     echo "  info      显示卷详细信息"
-    echo "  backup    备份卷数据"
+    echo "  backup    使用 mongodump 备份 MongoDB"
     echo "  clean     清理未使用的卷"
     echo "  size      显示卷大小"
     echo "  help      显示此帮助信息"
@@ -48,29 +48,31 @@ show_volume_info() {
 
 # 函数：备份卷数据
 backup_volumes() {
-    echo "💾 备份卷数据..."
-    
-    # 创建备份目录
-    backup_dir="./backup/$(date +%Y%m%d_%H%M%S)"
-    mkdir -p "$backup_dir"
-    
-    echo "📁 备份目录: $backup_dir"
-    
-    # 备份 Redis 数据
-    if docker volume inspect daily-hot-api_redis_data &>/dev/null; then
-        echo "🔴 备份 Redis 数据..."
-        docker run --rm -v daily-hot-api_redis_data:/data -v "$backup_dir:/backup" alpine tar czf /backup/redis_data.tar.gz -C /data .
+    if ! command -v mongodump >/dev/null 2>&1; then
+        echo "错误: 请先在运行脚本的主机安装 MongoDB Database Tools (mongodump)" >&2
+        return 1
     fi
-    
-    # 备份 MongoDB 数据
-    if docker volume inspect daily-hot-api_mongodb_data &>/dev/null; then
-        echo "🟢 备份 MongoDB 数据..."
-        docker run --rm -v daily-hot-api_mongodb_data:/data -v "$backup_dir:/backup" alpine tar czf /backup/mongodb_data.tar.gz -C /data .
+    if [[ -z "${MONGODB_URI:-}" ]]; then
+        echo "错误: 请设置可从本机访问的 MONGODB_URI" >&2
+        return 1
     fi
-    
-    echo "✅ 备份完成！"
-    echo "📁 备份位置: $backup_dir"
-    ls -la "$backup_dir"
+
+    backup_dir="./backup"
+    mkdir -p "$backup_dir" || return 1
+    archive="$backup_dir/mongodb_$(date +%Y%m%d_%H%M%S)_$$.archive.gz"
+    partial="${archive}.partial"
+    if ! mongodump --uri "$MONGODB_URI" --archive="$partial" --gzip; then
+        rm -f "$partial"
+        echo "错误: MongoDB 备份失败，未替换任何已有备份" >&2
+        return 1
+    fi
+    if [[ ! -s "$partial" ]]; then
+        rm -f "$partial"
+        echo "错误: MongoDB 备份为空" >&2
+        return 1
+    fi
+    mv "$partial" "$archive" || return 1
+    echo "MongoDB 备份完成: $archive"
 }
 
 # 函数：清理未使用的卷

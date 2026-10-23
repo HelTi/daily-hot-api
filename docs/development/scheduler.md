@@ -4,6 +4,10 @@
 
 现在支持从 `.env` 文件中动态配置定时任务的执行时间，基于 [NestJS 官方文档](https://docs.nestjs.com/techniques/task-scheduling#dynamic-cron-jobs) 实现，无需修改代码即可调整定时任务的执行频率。
 
+热榜定时抓取、手动触发与每日简报刷新共用 `FetchHotDataTask`，进程内最多同时抓取 5 个来源；同一来源的并发请求合并。全局 Cron 每次运行时还会检查来源配置中的 `lastFetchAt + interval`，未到期的来源跳过。应用不执行 MongoDB 备份，运维方式见[数据卷与备份](/operations/volumes)。
+
+手动触发会创建进程内 `runId` 并返回 HTTP 202；后台使用同一抓取队列执行，`GET /api/scheduler/runs/:runId` 提供摘要结果。优雅停机时先移除 Cron，再等待在途抓取最多 30 秒。
+
 ## 环境变量配置
 
 在 `.env` 文件中添加以下配置：
@@ -105,7 +109,7 @@ SCHEDULER_CRON_EXPRESSION=0 */2 * * *
 
 ### 查看定时任务状态
 ```bash
-curl http://localhost:6688/api/scheduler/status
+curl http://localhost:6689/api/scheduler/status
 ```
 
 响应示例：
@@ -122,26 +126,26 @@ curl http://localhost:6688/api/scheduler/status
 
 ### 手动启动定时任务
 ```bash
-curl -X POST http://localhost:6688/api/scheduler/start
+curl -X POST http://localhost:6689/api/scheduler/start
 ```
 
 ### 手动停止定时任务
 ```bash
-curl -X POST http://localhost:6688/api/scheduler/stop
+curl -X POST http://localhost:6689/api/scheduler/stop
 ```
 
 ### 重新配置定时任务
 ```bash
-curl -X POST http://localhost:6688/api/scheduler/reconfigure
+curl -X POST http://localhost:6689/api/scheduler/reconfigure
 ```
 
 ### 手动触发数据抓取
 ```bash
 # 抓取所有数据源
-curl -X POST http://localhost:6688/api/scheduler/trigger
+curl -X POST http://localhost:6689/api/scheduler/trigger
 
 # 抓取特定数据源
-curl -X POST http://localhost:6688/api/scheduler/trigger \
+curl -X POST http://localhost:6689/api/scheduler/trigger \
   -H "Content-Type: application/json" \
   -d '{"source": "zhihu"}'
 ```

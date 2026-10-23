@@ -28,6 +28,36 @@ export class HotListQueryDto {
   @IsString()
   type?: string;
 
-  // 支持动态参数，其他参数不需要在这里定义
-  [key: string]: any;
+  // 源特定参数也必须有校验元数据，否则全局 whitelist 会拒绝请求。
+  @IsOptional()
+  @IsString()
+  area?: string;
+
+  @IsOptional()
+  @IsString()
+  month?: string;
+
+  @IsOptional()
+  @IsString()
+  day?: string;
+
+  @IsOptional()
+  @IsString()
+  province?: string;
+
+  @IsOptional()
+  @IsString()
+  page?: string;
+
+  @IsOptional()
+  @IsString()
+  pageSize?: string;
+
+  @IsOptional()
+  @IsString()
+  cursor?: string;
+
+  @IsOptional()
+  @IsString()
+  game?: string;
 }

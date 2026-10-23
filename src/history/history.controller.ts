@@ -1,4 +1,11 @@
-import { Controller, Get, Query, Param, ParseIntPipe } from '@nestjs/common';
+import {
+  BadRequestException,
+  Controller,
+  Get,
+  Query,
+  Param,
+  ParseIntPipe,
+} from '@nestjs/common';
 import { HistoryService } from './history.service';
 import { SearchHistoryDto } from './dto/search-history.dto';
 import {
@@ -42,6 +49,9 @@ export class HistoryController {
     @Query('source') source?: string,
     @Query('limit', new ParseIntPipe({ optional: true })) limit?: number,
   ) {
+    if (limit !== undefined && (limit < 1 || limit > 100)) {
+      throw new BadRequestException('limit must be between 1 and 100');
+    }
     return this.historyService.getLatestData(source, limit);
   }
 

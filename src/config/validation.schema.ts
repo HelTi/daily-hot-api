@@ -1,20 +1,19 @@
 import { z } from 'zod';
 
+const envBoolean = (fallback: boolean) =>
+  z.preprocess((value) => {
+    if (value === undefined) return fallback;
+    if (value === 'true' || value === true) return true;
+    if (value === 'false' || value === false) return false;
+    return value;
+  }, z.boolean());
+
 export const configValidationSchema = z.object({
-  PORT: z.coerce.number().default(6689),
-  DISALLOW_ROBOT: z.preprocess(
-    (val) => val === 'true',
-    z.boolean().default(true),
-  ),
+  PORT: z.coerce.number().int().min(1).max(65535).default(6689),
   CACHE_TTL: z.coerce.number().default(3600),
-  REQUEST_TIMEOUT: z.coerce.number().default(6000),
+  REQUEST_TIMEOUT: z.coerce.number().int().min(1000).default(6000),
   ALLOWED_DOMAIN: z.string().default('*'),
-  ALLOWED_HOST: z.string().default('ttkit.cn'),
-  USE_LOG_FILE: z.preprocess(
-    (val) => val === 'true',
-    z.boolean().default(true),
-  ),
-  RSS_MODE: z.preprocess((val) => val === 'true', z.boolean().default(false)),
+  RSS_MODE: envBoolean(false),
   REDIS_HOST: z.string().default('127.0.0.1'),
   REDIS_PORT: z.coerce.number().default(6379),
   REDIS_PASSWORD: z.string().default(''),
@@ -22,17 +21,10 @@ export const configValidationSchema = z.object({
   IGNORE_SAVE_SOURCES: z.string().default(''),
   MONGODB_URI: z.string().default(''),
   // 定时任务配置
-  SCHEDULER_AUTO_START: z.preprocess(
-    (val) => val === 'true',
-    z.boolean().default(true),
-  ),
+  SCHEDULER_AUTO_START: envBoolean(false),
   SCHEDULER_CRON_EXPRESSION: z.string().default('0 */12 * * *'),
-  BACKUP_CRON_EXPRESSION: z.string().default('0 1 * * *'),
   // 每日简报配置
-  BRIEF_ENABLED: z.preprocess(
-    (val) => val === 'true',
-    z.boolean().default(false),
-  ),
+  BRIEF_ENABLED: envBoolean(false),
   BRIEF_CRON_EXPRESSION: z.string().default('0 12 * * *'),
   BRIEF_TIMEZONE: z.string().default('Asia/Shanghai'),
   BRIEF_SOURCES: z

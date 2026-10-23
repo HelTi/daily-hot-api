@@ -1,6 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { TokenService } from './token.service';
-import { CacheService } from '../cache/cache.service';
 import { HttpClientService } from '../http/http.service';
 
 describe('TokenService', () => {
@@ -11,16 +10,9 @@ describe('TokenService', () => {
       providers: [
         TokenService,
         {
-          provide: CacheService,
-          useValue: {
-            get: jest.fn().mockResolvedValue(null),
-            set: jest.fn().mockResolvedValue(undefined),
-            del: jest.fn().mockResolvedValue(undefined),
-          },
-        },
-        {
           provide: HttpClientService,
           useValue: {
+            invalidateGet: jest.fn().mockResolvedValue(undefined),
             get: jest.fn().mockResolvedValue({
               data: {
                 data: {
@@ -51,6 +43,16 @@ describe('TokenService', () => {
       expect(result).toBeDefined();
       expect(typeof result).toBe('string');
       expect(result).toContain('w_rid=');
+    });
+
+    it('signs each parameter set without reusing a cached signature', async () => {
+      const first = await service.getBiliWbi({ rid: '0', type: 'all' });
+      const second = await service.getBiliWbi({ rid: '1', type: 'all' });
+
+      expect(first).toContain('rid=0');
+      expect(second).toContain('rid=1');
+      expect(first).not.toBe(second);
+      expect(first).not.toContain('[object Object]');
     });
   });
 

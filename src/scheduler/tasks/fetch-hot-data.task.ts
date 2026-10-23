@@ -1,35 +1,105 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BeforeApplicationShutdown, Injectable, Logger } from '@nestjs/common';
 import { HotListsService } from '../../host-lists/hot-lists.service';
 import { HotItemRepository } from '../../database/repositories/hot-item.repository';
 import { SourceConfigRepository } from '../../database/repositories/source-config.repository';
-import { CacheService } from '../../cache/cache.service';
+import { ConfigService } from '@nestjs/config';
+import { HotListItem } from '../../host-lists/interfaces/hot-list.interface';
 
-interface FetchResult {
+export interface FetchResult {
   sourceName: string;
   success: boolean;
   duration: number;
   savedCount: number;
   totalCount: number;
+  items?: HotListItem[];
   error?: string;
 }
 
 @Injectable()
-export class FetchHotDataTask {
+export class FetchHotDataTask implements BeforeApplicationShutdown {
   private readonly logger = new Logger(FetchHotDataTask.name);
-  private readonly maxRetries = 3;
-  private readonly retryDelay = 1000; // 1秒
+  private readonly maxConcurrency = 5;
+  private active = 0;
+  private readonly waiters: Array<() => void> = [];
+  private readonly inFlight = new Map<string, Promise<FetchResult>>();
+  private shuttingDown = false;
+  private readonly ignoredSaveSources: Set<string>;
 
   constructor(
     private readonly hotListsService: HotListsService,
     private readonly hotItemRepository: HotItemRepository,
     private readonly sourceConfigRepository: SourceConfigRepository,
-    private readonly cacheService: CacheService,
-  ) {}
+    configService: ConfigService,
+  ) {
+    this.ignoredSaveSources = new Set(
+      (configService.get<string>('IGNORE_SAVE_SOURCES') ?? '')
+        .split(',')
+        .map((name) => name.trim())
+        .filter(Boolean),
+    );
+  }
 
   /**
    * 执行单个数据源的数据抓取
    */
-  async execute(sourceName: string): Promise<FetchResult> {
+  execute(sourceName: string): Promise<FetchResult> {
+    const current = this.inFlight.get(sourceName);
+    if (current !== undefined) return current;
+    if (this.shuttingDown) {
+      return Promise.resolve({
+        sourceName,
+        success: false,
+        duration: 0,
+        savedCount: 0,
+        totalCount: 0,
+        error: 'Application is shutting down',
+      });
+    }
+
+    const pending = this.withSlot(() => this.executeSource(sourceName));
+    this.inFlight.set(sourceName, pending);
+    void pending.then(
+      () => this.inFlight.delete(sourceName),
+      () => this.inFlight.delete(sourceName),
+    );
+    return pending;
+  }
+
+  async beforeApplicationShutdown(): Promise<void> {
+    this.shuttingDown = true;
+    if (this.inFlight.size === 0) return;
+    this.logger.log(
+      `Waiting for ${this.inFlight.size} active fetches to finish`,
+    );
+    let timer: NodeJS.Timeout | undefined;
+    try {
+      await Promise.race([
+        Promise.allSettled([...this.inFlight.values()]),
+        new Promise<void>((resolve) => {
+          timer = setTimeout(resolve, 30_000);
+        }),
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+
+  private async withSlot<T>(operation: () => Promise<T>): Promise<T> {
+    if (this.active < this.maxConcurrency) {
+      this.active++;
+    } else {
+      await new Promise<void>((resolve) => this.waiters.push(resolve));
+    }
+    try {
+      return await operation();
+    } finally {
+      const next = this.waiters.shift();
+      if (next) next();
+      else this.active--;
+    }
+  }
+
+  private async executeSource(sourceName: string): Promise<FetchResult> {
     const startTime = Date.now();
     const result: FetchResult = {
       sourceName,
@@ -58,8 +128,12 @@ export class FetchHotDataTask {
         return result;
       }
 
-      // 获取热点数据（带重试机制）
-      const hotListData = await this.fetchWithRetry(sourceName);
+      // 网络层只重试瞬时 HTTP 故障；解析等错误在这里记录为失败。
+      const hotListData = await this.hotListsService.fetchSource(
+        sourceName,
+        {},
+        true,
+      );
 
       if (!hotListData || !hotListData.data || hotListData.data.length === 0) {
         result.error = `No data received for source: ${sourceName}`;
@@ -68,21 +142,20 @@ export class FetchHotDataTask {
       }
 
       result.totalCount = hotListData.data.length;
+      result.items = hotListData.data;
 
-      // 保存到数据库（自动去重）
-      const savedCount = await this.hotItemRepository.saveHotItems(
-        hotListData.data,
-        sourceName,
-      );
+      const savedCount = this.ignoredSaveSources.has(sourceName)
+        ? 0
+        : await this.hotItemRepository.saveHotItems(
+            hotListData.data,
+            sourceName,
+          );
 
       result.savedCount = savedCount;
       result.success = true;
 
       // 更新最后抓取时间
       await this.sourceConfigRepository.updateLastFetchTime(sourceName);
-
-      // 清除相关缓存
-      await this.clearSourceCache(sourceName);
 
       const duration = Date.now() - startTime;
       result.duration = duration;
@@ -109,46 +182,15 @@ export class FetchHotDataTask {
   /**
    * 批量执行多个数据源
    */
-  async executeBatch(
-    sourceNames: string[],
-    maxConcurrency = 5,
-  ): Promise<FetchResult[]> {
+  async executeBatch(sourceNames: string[]): Promise<FetchResult[]> {
     const startTime = Date.now();
     this.logger.log(
-      `🚀 Starting batch fetch for ${sourceNames.length} sources with max concurrency: ${maxConcurrency}`,
+      `🚀 Starting batch fetch for ${sourceNames.length} sources with max concurrency: ${this.maxConcurrency}`,
     );
 
-    const results: FetchResult[] = [];
-
-    // 使用并发控制，避免同时发起太多请求
-    for (let i = 0; i < sourceNames.length; i += maxConcurrency) {
-      const batch = sourceNames.slice(i, i + maxConcurrency);
-      const batchResults = await Promise.allSettled(
-        batch.map((source) => this.execute(source)),
-      );
-
-      // 处理批次结果
-      batchResults.forEach((result, index) => {
-        if (result.status === 'fulfilled') {
-          results.push(result.value);
-        } else {
-          const sourceName = batch[index];
-          results.push({
-            sourceName,
-            success: false,
-            duration: 0,
-            savedCount: 0,
-            totalCount: 0,
-            error: result.reason?.message || 'Unknown error',
-          });
-        }
-      });
-
-      // 批次间延迟，避免对目标服务器造成过大压力
-      if (i + maxConcurrency < sourceNames.length) {
-        await this.delay(500);
-      }
-    }
+    const results = await Promise.all(
+      sourceNames.map((source) => this.execute(source)),
+    );
 
     const totalDuration = Date.now() - startTime;
     const succeeded = results.filter((r) => r.success).length;
@@ -178,60 +220,5 @@ export class FetchHotDataTask {
   private validateSource(sourceName: string): boolean {
     const sources = this.hotListsService.getAllSources();
     return sources.includes(sourceName);
-  }
-
-  /**
-   * 带重试机制的数据获取
-   */
-  private async fetchWithRetry(
-    sourceName: string,
-    retryCount = 0,
-  ): Promise<any> {
-    try {
-      return await this.hotListsService.getHotList(
-        sourceName,
-        {},
-        true, // 不使用缓存，获取最新数据
-      );
-    } catch (error) {
-      if (retryCount < this.maxRetries) {
-        this.logger.warn(
-          `Retry ${retryCount + 1}/${this.maxRetries} for ${sourceName}: ${error instanceof Error ? error.message : String(error)}`,
-        );
-        await this.delay(this.retryDelay * Math.pow(2, retryCount)); // 指数退避
-        return this.fetchWithRetry(sourceName, retryCount + 1);
-      }
-      throw error;
-    }
-  }
-
-  /**
-   * 清除数据源相关缓存
-   */
-  private async clearSourceCache(sourceName: string): Promise<void> {
-    try {
-      const cacheKey = `hotlist:${sourceName}`;
-      await this.cacheService.del(cacheKey);
-      this.logger.debug(`Cleared cache for source: ${sourceName}`);
-    } catch (error) {
-      this.logger.warn(`Failed to clear cache for ${sourceName}:`, error);
-    }
-  }
-
-  /**
-   * 延迟函数
-   */
-  private delay(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-  }
-
-  /**
-   * 获取任务执行统计信息
-   */
-  getStats(): { maxRetries: number; retryDelay: number } {
-    return {
-      maxRetries: this.maxRetries,
-      retryDelay: this.retryDelay,
-    };
   }
 }

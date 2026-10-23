@@ -1,6 +1,6 @@
 # API 接口参考
 
-默认服务地址为 `http://localhost:6688`。项目没有统一的 `/api` 全局前缀：实时热榜使用 `/hot-lists`，历史、调度和简报接口使用 `/api/*`。
+默认服务地址为 `http://localhost:6689`。项目没有统一的 `/api` 全局前缀：实时热榜使用 `/hot-lists`，历史、调度和简报接口使用 `/api/*`。
 
 ## 健康检查
 
@@ -8,9 +8,11 @@
 | --- | --- | --- |
 | `GET` | `/` | 服务首页 |
 | `GET` | `/health` | 进程、内存和 Redis 健康状态 |
+| `GET` | `/ready` | MongoDB 已连接时返回 200，否则返回 503 |
 
 ```bash
-curl http://localhost:6688/health
+curl http://localhost:6689/health
+curl http://localhost:6689/ready
 ```
 
 Redis 不可用时可能返回 `status: "degraded"`。
@@ -32,7 +34,7 @@ Redis 不可用时可能返回 `status: "degraded"`。
 | `type` | string | 否 | 部分来源支持的榜单类别 |
 
 ```bash
-curl 'http://localhost:6688/hot-lists/zhihu?limit=10&noCache=false'
+curl 'http://localhost:6689/hot-lists/zhihu?limit=10&noCache=false'
 ```
 
 详细说明见[获取热榜](/guide/hot-lists)。
@@ -53,7 +55,7 @@ curl 'http://localhost:6688/hot-lists/zhihu?limit=10&noCache=false'
 | 参数 | 类型 | 默认值 | 说明 |
 | --- | --- | --- | --- |
 | `source` | string | 全部 | 来源 ID |
-| `keyword` | string | 无 | 标题和描述关键词 |
+| `keyword` | string | 无 | 标题和描述的字面量关键词，最多 100 字符 |
 | `startDate` | date | 无 | 开始日期，ISO 日期字符串 |
 | `endDate` | date | 无 | 结束日期，ISO 日期字符串 |
 | `page` | number | `1` | 页码，最小为 1 |
@@ -62,16 +64,19 @@ curl 'http://localhost:6688/hot-lists/zhihu?limit=10&noCache=false'
 | `sortOrder` | string | `desc` | `asc` 或 `desc` |
 
 ```bash
-curl 'http://localhost:6688/api/history/search?source=zhihu&keyword=AI&page=1&limit=10'
+curl 'http://localhost:6689/api/history/search?source=zhihu&keyword=AI&page=1&limit=10'
 ```
 
 详细说明见[历史热点](/guide/history)。
+
+`GET /api/history/latest` 的 `limit` 默认 50，范围 1–100；`/api/history/stats` 在进程内缓存最多 30 秒。
 
 ## 热点抓取调度器
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | `GET` | `/api/scheduler/status` | 获取运行状态 |
+| `GET` | `/api/scheduler/runs/:runId` | 查询手动抓取进度和结果，进程内保留最多一小时 |
 | `GET` | `/api/scheduler/ignored-sources` | 获取不保存的来源 |
 | `GET` | `/api/scheduler/configs` | 获取全部来源配置 |
 | `POST` | `/api/scheduler/start` | 启动调度器 |
@@ -83,15 +88,17 @@ curl 'http://localhost:6688/api/history/search?source=zhihu&keyword=AI&page=1&li
 立即抓取单个来源：
 
 ```bash
-curl -X POST http://localhost:6688/api/scheduler/trigger \
+curl -X POST http://localhost:6689/api/scheduler/trigger \
   -H 'Content-Type: application/json' \
   -d '{"source":"zhihu"}'
 ```
 
+此请求返回 `202`，响应中的 `runId` 可用于查询任务结果。
+
 更新来源配置：
 
 ```bash
-curl -X PUT http://localhost:6688/api/scheduler/config/zhihu \
+curl -X PUT http://localhost:6689/api/scheduler/config/zhihu \
   -H 'Content-Type: application/json' \
   -d '{"enabled":true,"interval":30}'
 ```
@@ -116,7 +123,7 @@ curl -X PUT http://localhost:6688/api/scheduler/config/zhihu \
 生成测试简报：
 
 ```bash
-curl -X POST http://localhost:6688/api/briefs/generate \
+curl -X POST http://localhost:6689/api/briefs/generate \
   -H 'Content-Type: application/json' \
   -d '{"sources":["cls"],"period":"manual-test","force":true}'
 ```

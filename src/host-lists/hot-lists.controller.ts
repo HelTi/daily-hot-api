@@ -36,8 +36,9 @@ export class HotListsController {
     const { limit, rss, ...otherParams } = query;
     let { noCache = false } = query;
     // 获取不允许手动刷新的源
-    const notAllowedRefreshSource = this.configService.get(
+    const notAllowedRefreshSource = this.configService.get<string>(
       'NOT_ALLOWED_REFRESH_SOURCE',
+      '',
     );
     // 判断是否不允许手动刷新
     const hasNotRefresh = notAllowedRefreshSource.split(',').includes(source);
@@ -50,7 +51,7 @@ export class HotListsController {
     const listData = await this.hotListsService.getHotList(
       source,
       {
-        limit: parseInt(limit),
+        limit: limit ? parseInt(limit, 10) : undefined,
         rss,
         ...otherParams, // 动态传递所有其他参数
       },

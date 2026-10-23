@@ -6,12 +6,9 @@
 
 | 变量 | 示例值 | 说明 |
 | --- | --- | --- |
-| `PORT` | `6688` | HTTP 服务监听端口 |
+| `PORT` | `6689` | HTTP 服务监听端口 |
 | `ALLOWED_DOMAIN` | `*` | CORS 允许的 Origin |
-| `ALLOWED_HOST` | `*` | 允许的主域名；当前配置保留用于主机限制 |
-| `DISALLOW_ROBOT` | `true` | 是否禁止搜索引擎抓取 |
 | `REQUEST_TIMEOUT` | `6000` | 上游 HTTP 请求超时，单位毫秒 |
-| `USE_LOG_FILE` | `true` | 是否输出日志文件 |
 | `RSS_MODE` | `false` | 是否让热榜接口默认返回 RSS |
 
 ## 缓存与数据库
@@ -34,7 +31,6 @@ Redis 使用延迟连接，连接失败时不会阻止进程启动。历史热�
 | `IGNORE_SAVE_SOURCES` | `v2ex,...` | 不写入历史数据库的来源，逗号分隔 |
 | `SCHEDULER_AUTO_START` | `false` | 启动应用时是否自动启动热点调度器 |
 | `SCHEDULER_CRON_EXPRESSION` | `0 */12 * * *` | 热点调度 Cron 表达式 |
-| `BACKUP_CRON_EXPRESSION` | `0 1 * * *` | 历史备份 Cron 表达式 |
 
 ## 每日简报
 
@@ -48,6 +44,9 @@ Redis 使用延迟连接，连接失败时不会阻止进程启动。历史热�
 | `BRIEF_TOP_ITEMS_PER_SOURCE` | `10` | 每个来源最多参与分析的条目数 |
 | `BRIEF_MAX_TOPICS` | `12` | 最多搜索增强的候选主题数 |
 | `BRIEF_STOCK_RANKING_CACHE_TTL` | `43200` | 股票历史排名缓存秒数 |
+| `BRIEF_GENERATING_TIMEOUT_MINUTES` | `30` | 生成尝试的过期阈值，单位分钟 |
+| `BRIEF_SOURCE_CONCURRENCY` | `3` | 简报刷新源的最大并发数 |
+| `BRIEF_SEARCH_CONCURRENCY` | `3` | 搜索增强的最大并发数 |
 
 ## AI 与搜索服务
 
@@ -58,6 +57,9 @@ Redis 使用延迟连接，连接失败时不会阻止进程启动。历史热�
 | `AI_MODEL` | `deepseek-v4-flash` | 简报生成模型名 |
 | `TAVILY_API_KEY` | `tvly-dev-xxx` | Tavily Search API Key |
 | `TAVILY_MAX_RESULTS` | `5` | 每个搜索请求最多结果数 |
+| `AI_TIMEOUT_MS` | `120000` | 单次 AI 请求超时，单位毫秒 |
+| `AI_MAX_RETRIES` | `2` | AI 客户端重试次数 |
+| `TAVILY_TIMEOUT_MS` | `10000` | 单次 Tavily 请求超时，单位毫秒 |
 
 ::: danger 密钥安全
 不要提交真实 API Key，也不要在日志、Issue、构建产物或前端代码中暴露密钥。GitHub Pages 只托管静态文档，不应注入任何服务端密钥。
@@ -65,9 +67,8 @@ Redis 使用延迟连接，连接失败时不会阻止进程启动。历史热�
 
 ## 修改配置
 
-新增环境变量时必须同步修改：
+默认值和校验规则只定义在 `src/config/validation.schema.ts`。`configuration.ts` 从这张 Schema 读取运行时配置。新增环境变量时同步修改：
 
-1. `src/config/configuration.ts`
-2. `src/config/validation.schema.ts`
-3. `.env.example`
-4. 本页对应配置表
+1. `src/config/validation.schema.ts`
+2. `.env.example`
+3. 本页对应配置表

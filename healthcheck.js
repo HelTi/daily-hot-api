@@ -2,7 +2,7 @@ const http = require('http');
 
 const options = {
   hostname: 'localhost',
-  port: process.env.PORT || 3000,
+  port: process.env.PORT || 6689,
   path: '/health',
   method: 'GET',
   timeout: 2000,
@@ -25,4 +25,4 @@ request.on('timeout', () => {
   process.exit(1);
 });
 
-request.end(); 
+request.end();

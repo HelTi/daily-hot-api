@@ -25,10 +25,12 @@ export interface HotListGetListResponse {
       name: string;
       type: Record<string, string>;
     };
-    [key: string]: {
-      name: string;
-      type: Record<string, string>;
-    };
+    [key: string]:
+      | {
+          name: string;
+          type: Record<string, string>;
+        }
+      | undefined;
   };
   [key: string]: any;
 }

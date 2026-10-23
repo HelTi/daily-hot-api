@@ -10,7 +10,7 @@ import { headers } from 'src/utils/headers';
 
 const SITE_URL = 'https://www.eet-china.com';
 const LIST_URL = `${SITE_URL}/mp`;
-const DEFAULT_TYPE_MAP = {
+const DEFAULT_TYPE_MAP: Record<string, string> = {
   newest: '最新',
   c1: '半导体',
   c2: '通信网络',
@@ -139,7 +139,10 @@ export class XinyuSource implements HotListSource {
 
     return {
       data,
-      type: DEFAULT_TYPE_MAP[options.type] || options.type || '最新',
+      type:
+        (options.type && DEFAULT_TYPE_MAP[options.type]) ||
+        options.type ||
+        '最新',
       params: {
         type: {
           name: '类目',
