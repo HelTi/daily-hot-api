@@ -12,6 +12,22 @@ npm run build
 
 编辑 `.env`，确认生产端口、MongoDB、Redis、CORS 和任务开关。生产服务器不要保留示例 API Key。
 
+::: warning MONGODB_URI 必填
+`ecosystem.config.cjs` 设置了 `NODE_ENV=production`，此时 `MONGODB_URI` 为必填项。`.env` 里缺失（包括从旧版本升级、`.env` 早于该变量存在的情况）会导致进程在启动阶段反复崩溃，PM2 重试到上限后把状态置为 `errored`：
+
+```text
+ERROR [ExceptionHandler] Error: 配置验证失败: Error: MONGODB_URI is required when NODE_ENV=production. ...
+```
+
+`deploy-pm2.sh` 会在调用 PM2 之前检查这一项并直接报错退出。手动 `pm2 start` 时请先确认：
+
+```bash
+grep -E '^MONGODB_URI=.+' .env || echo '缺少 MONGODB_URI'
+```
+:::
+
+服务端口取自 `.env` 的 `PORT`（默认 `6689`），`ecosystem.config.cjs` 不再覆盖它，因此改端口只需改 `.env` 并重启。
+
 ## 使用项目脚本
 
 仓库提供 `deploy-pm2.sh`：

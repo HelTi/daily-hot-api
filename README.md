@@ -201,9 +201,14 @@ sh deploy-pm2.sh
 # 构建镜像
 $ docker build -t daily-hot-api .
 
-# 运行容器
-$ docker run -p 6689:6689 daily-hot-api
+# 运行容器（镜像内置 NODE_ENV=production，必须传入 MONGODB_URI）
+$ docker run -p 6689:6689 \
+  -e MONGODB_URI=mongodb://<mongo-host>:27017/daily-hot-api \
+  daily-hot-api
 ```
+
+把 `<mongo-host>` 换成实际地址；Docker Desktop 上访问宿主机的 MongoDB 可用 `host.docker.internal`，MongoDB 跑在另一个容器里时见下面的「启用完整服务」。
+
 或者使用 make 命令：
 
 ```bash
@@ -216,8 +221,10 @@ docker镜像部署：
 docker pull ttkit/daily-hot-api:latest
 # 或者使用github的镜像源拉取镜像
 docker pull ghcr.io/helti/daily-hot-api:latest
-# 运行
-docker run --restart always -p 6689:6689 -d ttkit/daily-hot-api:latest
+# 运行（MONGODB_URI 必填，指向你自己的 MongoDB）
+docker run --restart always -p 6689:6689 -d \
+  -e MONGODB_URI=mongodb://<mongo-host>:27017/daily-hot-api \
+  ttkit/daily-hot-api:latest
 ```
 
 启用完整服务：
@@ -251,7 +258,7 @@ docker run -d --name daily-hot-api \
 | `REDIS_PORT` | Redis 端口 | `6379` |
 | `REDIS_PASSWORD` | Redis 密码 | `` |
 | `CACHE_TTL` | 缓存过期时间（秒） | `3600` |
-| `MONGODB_URI` | MongoDB 连接字符串 | `` |
+| `MONGODB_URI` | MongoDB 连接字符串，`NODE_ENV=production` 时必填（镜像与 pm2 配置均已设置该值），缺失会启动失败 | `` |
 | `SCHEDULER_AUTO_START` | 是否自动启动定时抓取任务 | `false` |
 | `SCHEDULER_CRON_EXPRESSION` | 定时抓取任务 Cron 表达式 | `0 */12 * * *` |
 

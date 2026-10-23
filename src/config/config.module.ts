@@ -12,7 +12,13 @@ import configuration from './configuration';
         try {
           const validated = configValidationSchema.parse(config);
           if (config.NODE_ENV === 'production' && !validated.MONGODB_URI) {
-            throw new Error('MONGODB_URI is required in production');
+            // 镜像和 pm2 的 ecosystem 都带 NODE_ENV=production，所以这条提示
+            // 必须说清该在哪里补变量，否则只会看到一行无从下手的启动失败。
+            throw new Error(
+              'MONGODB_URI is required when NODE_ENV=production. ' +
+                'Set it in .env (see .env.example), or pass it to the process: ' +
+                'docker run -e MONGODB_URI=mongodb://<host>:27017/daily-hot-api',
+            );
           }
           return validated;
         } catch (error) {
