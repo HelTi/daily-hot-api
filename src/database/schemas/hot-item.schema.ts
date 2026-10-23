@@ -44,7 +44,7 @@ export class HotItem {
 export const HotItemSchema = SchemaFactory.createForClass(HotItem);
 
 // 创建索引
-HotItemSchema.index({ source: 1, url: 1 }); // 去重索引：source + url 组合唯一索引
+HotItemSchema.index({ source: 1, url: 1 }, { unique: true });
 HotItemSchema.index({ source: 1, timestamp: -1 }); // 查询优化索引
 HotItemSchema.index({ timestamp: -1 }); // 查询优化索引
 HotItemSchema.index({ title: 'text', desc: 'text' }); // 全文搜索索引

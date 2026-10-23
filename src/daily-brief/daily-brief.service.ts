@@ -5,18 +5,20 @@ import {
   StockRankingItem,
 } from '../database/repositories/daily-brief.repository';
 import { HotItemRepository } from '../database/repositories/hot-item.repository';
-import { HotListsService } from '../host-lists/hot-lists.service';
+import { FetchHotDataTask } from '../scheduler/tasks/fetch-hot-data.task';
 import { AiAnalysisClient } from './clients/ai-analysis.client';
 import { TavilySearchClient } from './clients/tavily-search.client';
 import {
   BriefInputItem,
   BriefSearchEvidence,
+  BriefSearchResult,
   GenerateBriefOptions,
 } from './interfaces/daily-brief.interface';
 import { StockRankingQueryDto } from './dto/stock-ranking-query.dto';
 import { mapWithConcurrency } from './utils/concurrency';
 import { endOfBriefDate, formatBriefDate } from './utils/brief-date';
 import { DailyBriefConfigService } from './daily-brief.config';
+import { createHash, randomUUID } from 'crypto';
 
 const STOCK_RANKING_CACHE_PREFIX = 'daily-brief:statistics:stocks:';
 
@@ -43,7 +45,7 @@ export class DailyBriefService {
     private readonly config: DailyBriefConfigService,
     private readonly dailyBriefRepository: DailyBriefRepository,
     private readonly hotItemRepository: HotItemRepository,
-    private readonly hotListsService: HotListsService,
+    private readonly fetchHotDataTask: FetchHotDataTask,
     private readonly aiAnalysisClient: AiAnalysisClient,
     private readonly tavilySearchClient: TavilySearchClient,
     private readonly cacheService: CacheService,
@@ -63,85 +65,126 @@ export class DailyBriefService {
         briefDate,
         period,
       );
-      if (existing) {
-        if (existing.status === 'success') {
-          return existing;
-        }
-        if (existing.status === 'generating') {
-          // 进程在生成过程中被中断时文档会永远停在 generating，
-          // 超过阈值就当作失败处理，否则该日期会被永久锁死。
-          if (!this.isGenerationStale(existing.updatedAt)) {
-            throw new BadRequestException(
-              'A daily brief is already being generated for date ' +
-                briefDate +
-                ' and period ' +
-                period +
-                '.',
-            );
-          }
-          this.logger.warn(
-            `Found a stale generating brief for ${briefDate}/${period}, regenerating`,
-          );
-        }
-      }
+      if (existing?.status === 'success') return existing;
     }
 
-    await this.dailyBriefRepository.upsertGenerating({
+    const generationId = randomUUID();
+    const timeoutMs = this.config.generatingTimeoutMinutes * 60_000;
+    const claimed = await this.dailyBriefRepository.claimGeneration({
       briefDate,
       period,
       sources,
       inputWindow,
       model: this.aiAnalysisClient.getModel(),
+      generationId,
+      staleBefore: new Date(Date.now() - timeoutMs),
     });
+    if (!claimed) {
+      throw new BadRequestException(
+        `A daily brief is already being generated for ${briefDate}/${period}`,
+      );
+    }
+
+    const heartbeat = setInterval(
+      () => {
+        void this.dailyBriefRepository
+          .heartbeatGeneration(briefDate, period, generationId)
+          .catch((error: unknown) =>
+            this.logger.warn('Brief heartbeat failed', error),
+          );
+      },
+      Math.min(60_000, Math.max(1_000, Math.floor(timeoutMs / 3))),
+    );
+
+    let timeout: NodeJS.Timeout | undefined;
 
     try {
-      const fetchedItems = await this.fetchLatestSourceItems(sources);
-      const historyItems = await this.loadHistoryItems(
-        sources,
-        inputWindow.start.getTime(),
-        inputWindow.end.getTime(),
-      );
-      const inputItems = this.mergeAndLimitItems(
-        [...fetchedItems, ...historyItems],
-        sources.length,
-      );
-
-      if (inputItems.length === 0) {
-        throw new Error('No hot items available for brief generation');
-      }
-
-      const searchEvidence = await this.buildSearchEvidence(inputItems);
-      const analysis = await this.aiAnalysisClient.analyzeDailyBrief({
-        briefDate,
-        sources,
-        items: inputItems,
-        searchEvidence,
-      });
-
-      const brief = await this.dailyBriefRepository.markSuccess(
-        briefDate,
-        period,
-        {
-          analysis: analysis as unknown as Record<string, unknown>,
-          markdown: analysis.markdown || this.buildFallbackMarkdown(analysis),
-          rawInputItems: inputItems as unknown as Record<string, unknown>[],
-          searchEvidence: searchEvidence as unknown as Record<
-            string,
-            unknown
-          >[],
-          model: this.aiAnalysisClient.getModel(),
-          tavilyUsed: searchEvidence.some((item) => item.results.length > 0),
-        },
-      );
-      await this.invalidateStockRankingCache();
-
-      return this.toPublicBrief(brief);
+      return await Promise.race([
+        this.generateClaimedBrief(
+          briefDate,
+          period,
+          generationId,
+          sources,
+          inputWindow,
+        ),
+        new Promise<never>((_, reject) => {
+          timeout = setTimeout(
+            () => reject(new Error('Daily brief generation timed out')),
+            timeoutMs,
+          );
+        }),
+      ]);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      // 失败时没有任何简报内容落库，排名数据不变，无需清缓存
-      await this.dailyBriefRepository.markFailed(briefDate, period, message);
+      try {
+        await this.dailyBriefRepository.markFailed(
+          briefDate,
+          period,
+          generationId,
+          message,
+        );
+      } catch (markError) {
+        this.logger.error(
+          'Failed to record brief generation failure',
+          markError,
+        );
+      }
       throw error;
+    } finally {
+      clearInterval(heartbeat);
+      if (timeout) clearTimeout(timeout);
     }
+  }
+
+  private async generateClaimedBrief(
+    briefDate: string,
+    period: string,
+    generationId: string,
+    sources: string[],
+    inputWindow: { start: Date; end: Date; lookbackHours: number },
+  ) {
+    const fetchedItems = await this.fetchLatestSourceItems(sources);
+    const historyItems = await this.loadHistoryItems(
+      sources,
+      inputWindow.start.getTime(),
+      inputWindow.end.getTime(),
+    );
+    const inputItems = this.mergeAndLimitItems(
+      [...fetchedItems, ...historyItems],
+      sources.length,
+    );
+
+    if (inputItems.length === 0) {
+      throw new Error('No hot items available for brief generation');
+    }
+
+    const searchEvidence = await this.buildSearchEvidence(inputItems);
+    const analysis = await this.aiAnalysisClient.analyzeDailyBrief({
+      briefDate,
+      sources,
+      items: inputItems,
+      searchEvidence,
+    });
+
+    const brief = await this.dailyBriefRepository.markSuccess(
+      briefDate,
+      period,
+      generationId,
+      {
+        analysis: analysis as unknown as Record<string, unknown>,
+        markdown: analysis.markdown || this.buildFallbackMarkdown(analysis),
+        rawInputItems: inputItems as unknown as Record<string, unknown>[],
+        searchEvidence: searchEvidence as unknown as Record<string, unknown>[],
+        model: this.aiAnalysisClient.getModel(),
+        tavilyUsed: searchEvidence.some((item) => item.results.length > 0),
+        sources,
+        inputWindow,
+      },
+    );
+    if (!brief) throw new Error('Daily brief generation claim was lost');
+    await this.invalidateStockRankingCache();
+
+    return this.toPublicBrief(brief);
   }
 
   findLatest(period?: string, includeDebug = false) {
@@ -307,18 +350,12 @@ export class DailyBriefService {
       this.config.sourceConcurrency,
       async (source): Promise<BriefInputItem[]> => {
         try {
-          const hotList = await this.hotListsService.getHotList(
-            source,
-            {},
-            true,
-          );
-          if (!hotList.data.length) {
+          const refreshed = await this.fetchHotDataTask.execute(source);
+          if (!refreshed.success || !refreshed.items?.length) {
             return [];
           }
 
-          await this.hotItemRepository.saveHotItems(hotList.data, source);
-
-          return hotList.data.slice(0, topItemsPerSource).map((item) => ({
+          return refreshed.items.slice(0, topItemsPerSource).map((item) => ({
             source,
             title: item.title,
             desc: item.desc,
@@ -375,9 +412,8 @@ export class DailyBriefService {
   }
 
   private mergeAndLimitItems(items: BriefInputItem[], sourceCount: number) {
-    const maxItems = Math.max(1, sourceCount) * this.config.topItemsPerSource;
     const seen = new Set<string>();
-    const merged: BriefInputItem[] = [];
+    const bySource = new Map<string, BriefInputItem[]>();
 
     for (const item of items) {
       if (!item.title || !item.url) {
@@ -388,46 +424,70 @@ export class DailyBriefService {
         continue;
       }
       seen.add(key);
-      merged.push(item);
+      const sourceItems = bySource.get(item.source) ?? [];
+      sourceItems.push(item);
+      bySource.set(item.source, sourceItems);
     }
 
-    return merged
-      .sort((a, b) => {
+    for (const sourceItems of bySource.values()) {
+      sourceItems.sort((a, b) => {
         const tA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
         const tB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
         return tB - tA;
-      })
-      .slice(0, maxItems);
+      });
+    }
+
+    // 每个来源先取自身前 N 条，再按轮次交错，防止一个来源占满提示词。
+    const result: BriefInputItem[] = [];
+    for (let rank = 0; rank < this.config.topItemsPerSource; rank++) {
+      for (const sourceItems of bySource.values()) {
+        if (sourceItems[rank]) result.push(sourceItems[rank]);
+      }
+    }
+    return result.slice(
+      0,
+      Math.max(1, sourceCount) * this.config.topItemsPerSource,
+    );
   }
 
   private async buildSearchEvidence(
     items: BriefInputItem[],
   ): Promise<BriefSearchEvidence[]> {
-    const candidates = items.slice(0, this.config.maxTopics);
+    const seenTitles = new Set<string>();
+    const candidates = items
+      .filter((item) => {
+        const title = item.title
+          .toLocaleLowerCase()
+          .replace(/[\s\p{P}\p{S}]+/gu, '');
+        if (!title || seenTitles.has(title)) return false;
+        seenTitles.add(title);
+        return true;
+      })
+      .slice(0, Math.min(this.config.maxTopics, 12));
 
     return mapWithConcurrency(
       candidates,
       this.config.searchConcurrency,
       async (item) => {
-        const query = `${item.title} ${item.desc || ''} 产业链 A股 影响`;
-        const results = await this.tavilySearchClient.search(query);
+        const query = `${item.title} ${(item.desc || '').slice(0, 120)} 产业链 A股 影响`;
+        const key = `daily-brief:search:${createHash('sha256').update(query).digest('hex')}`;
+        const cached =
+          await this.cacheService.get<CacheData<BriefSearchResult[]>>(key);
+        const results =
+          cached?.data ?? (await this.tavilySearchClient.search(query));
+        if (!cached && results.length > 0) {
+          await this.cacheService.set(
+            key,
+            { data: results, updateTime: new Date().toISOString() },
+            3600,
+          );
+        }
         return {
           topicTitle: item.title,
           query,
           results,
         };
       },
-    );
-  }
-
-  private isGenerationStale(updatedAt?: Date) {
-    if (!updatedAt) {
-      return true;
-    }
-
-    return (
-      Date.now() - new Date(updatedAt).getTime() >
-      this.config.generatingTimeoutMinutes * 60000
     );
   }
 

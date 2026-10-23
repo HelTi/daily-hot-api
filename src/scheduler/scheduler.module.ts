@@ -16,6 +16,6 @@ import { CacheModule } from '../cache/cache.module';
   ],
   controllers: [SchedulerController],
   providers: [SchedulerService, FetchHotDataTask],
-  exports: [SchedulerService],
+  exports: [SchedulerService, FetchHotDataTask],
 })
 export class SchedulerModule {}

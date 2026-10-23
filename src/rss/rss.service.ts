@@ -23,7 +23,7 @@ export class RssService {
         language: 'zh',
         generator: 'daily-hot-api',
         copyright: 'Copyright © 2020-present Helti',
-        pubDate: new Date(data.updateTime),
+        pubDate: new Date(data.updateTime ?? Date.now()),
       });
 
       // 添加项目

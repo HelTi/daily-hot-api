@@ -9,9 +9,16 @@ import { DailyBriefController } from './daily-brief.controller';
 import { DailyBriefScheduler } from './daily-brief.scheduler';
 import { DailyBriefService } from './daily-brief.service';
 import { DailyBriefConfigService } from './daily-brief.config';
+import { SchedulerModule } from '../scheduler/scheduler.module';
 
 @Module({
-  imports: [ScheduleModule, CacheModule, DatabaseModule, HotListsModule],
+  imports: [
+    ScheduleModule,
+    CacheModule,
+    DatabaseModule,
+    HotListsModule,
+    SchedulerModule,
+  ],
   controllers: [DailyBriefController],
   providers: [
     DailyBriefConfigService,

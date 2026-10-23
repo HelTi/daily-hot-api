@@ -1,21 +1,29 @@
 import {
+  BadRequestException,
   Injectable,
   Logger,
+  NotFoundException,
   OnModuleInit,
   OnModuleDestroy,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { SchedulerRegistry } from '@nestjs/schedule';
 import { ConfigService } from '@nestjs/config';
 import { HotListsService } from '../host-lists/hot-lists.service';
 import { SourceConfigRepository } from '../database/repositories/source-config.repository';
-import { FetchHotDataTask } from './tasks/fetch-hot-data.task';
+import { FetchHotDataTask, FetchResult } from './tasks/fetch-hot-data.task';
 import { CronJob } from 'cron';
-import { exec as execCallback } from 'child_process';
-import { promisify } from 'util';
-import * as fs from 'fs';
-import * as path from 'path';
+import { randomUUID } from 'crypto';
 
-const exec = promisify(execCallback);
+type FetchRun = {
+  runId: string;
+  status: 'running' | 'completed' | 'failed';
+  sourceCount: number;
+  startedAt: string;
+  completedAt?: string;
+  results?: Array<Omit<FetchResult, 'items'>>;
+  error?: string;
+};
 
 @Injectable()
 export class SchedulerService implements OnModuleInit, OnModuleDestroy {
@@ -23,9 +31,9 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
   private isRunning = false;
   private schedulerEnabled = false;
   private readonly cronJobName = 'hot-data-fetch';
-  private readonly backupCronJobName = 'mongodb-backup';
 
   private readonly ignoreSources: string[] = [];
+  private readonly runs = new Map<string, FetchRun>();
 
   constructor(
     private readonly schedulerRegistry: SchedulerRegistry,
@@ -41,12 +49,10 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
   async onModuleInit() {
     await this.initializeSourceConfigs();
     this.setupDynamicCronJob();
-    this.setupBackupCronJob();
   }
 
   onModuleDestroy() {
     this.stopDynamicCronJob();
-    this.stopBackupCronJob();
   }
 
   // 加载忽略的数据源配置
@@ -122,68 +128,6 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  // 每日数据库备份定时任务（每天凌晨1点）
-  private setupBackupCronJob() {
-    if (!this.schedulerEnabled) {
-      return;
-    }
-    try {
-      this.stopBackupCronJob();
-
-      const backupCronExpression =
-        this.configService.get<string>('BACKUP_CRON_EXPRESSION') || '0 1 * * *';
-      const job = new CronJob(backupCronExpression, () => {
-        void this.runMongoBackup();
-      });
-
-      this.schedulerRegistry.addCronJob(this.backupCronJobName, job);
-      job.start();
-      this.logger.log(
-        `Backup cron job setup with expression: ${backupCronExpression}`,
-      );
-    } catch (error) {
-      this.logger.error('Failed to setup backup cron job:', error);
-    }
-  }
-
-  // 停止备份任务
-  private stopBackupCronJob() {
-    try {
-      if (this.schedulerRegistry.doesExist('cron', this.backupCronJobName)) {
-        this.schedulerRegistry.deleteCronJob(this.backupCronJobName);
-        this.logger.log(`Stopped cron job: ${this.backupCronJobName}`);
-      }
-    } catch (error) {
-      this.logger.error('Failed to stop backup cron job:', error);
-    }
-  }
-
-  // 执行 mongodump 备份
-  private async runMongoBackup() {
-    try {
-      const mongoUri =
-        this.configService.get<string>('MONGODB_URI') ||
-        'mongodb://localhost:27017/daily-hot-api';
-
-      const projectRoot = process.cwd();
-      const dataRootDir = path.resolve(projectRoot, 'data');
-      const backupOutDir = dataRootDir; // 直接备份到 data 目录
-
-      // 清理旧备份并确保目录存在
-      fs.rmSync(backupOutDir, { recursive: true, force: true });
-      fs.mkdirSync(backupOutDir, { recursive: true });
-
-      const dumpCommand = `mongodump --uri="${mongoUri}" --out="${backupOutDir}"`;
-      this.logger.log(`Starting MongoDB backup to ${backupOutDir}`);
-      const { stdout, stderr } = await exec(dumpCommand);
-      if (stdout) this.logger.log(stdout.trim());
-      if (stderr) this.logger.warn(stderr.trim());
-      this.logger.log('MongoDB backup completed');
-    } catch (error) {
-      this.logger.error('MongoDB backup failed:', error as Error);
-    }
-  }
-
   // 检查数据源是否应该被忽略
   private shouldIgnoreSource(source: string): boolean {
     return this.ignoreSources.includes(source);
@@ -225,40 +169,96 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
 
   // 处理定时任务
   private async processScheduledTasks() {
+    // 启动时 MongoDB 不可用可能导致初次配置初始化失败；每次调度重试一次。
+    await this.initializeSourceConfigs();
     const enabledConfigs = await this.sourceConfigRepository.findEnabled();
-
-    for (const config of enabledConfigs) {
-      // 检查是否应该忽略该数据源
-      if (this.shouldIgnoreSource(config.source)) {
-        this.logger.debug(`Skipping ignored source: ${config.source}`);
-        continue;
-      }
-
-      this.logger.log(`Scheduling fetch for source: ${config.source}`);
-      // 异步执行，不等待完成
-      this.fetchHotDataTask.execute(config.source).catch((error) => {
-        this.logger.error(`Failed to fetch data for ${config.source}:`, error);
-      });
-    }
+    const now = Date.now();
+    const sources = enabledConfigs
+      .filter((config) => {
+        if (this.shouldIgnoreSource(config.source)) return false;
+        const interval =
+          Number.isFinite(config.interval) && config.interval > 0
+            ? config.interval
+            : 30;
+        return (
+          !config.lastFetchAt ||
+          config.lastFetchAt.getTime() + interval * 60_000 <= now
+        );
+      })
+      .map((config) => config.source);
+    await this.fetchHotDataTask.executeBatch(sources);
   }
 
   // 手动触发数据抓取
-  async triggerFetch(source?: string): Promise<void> {
+  async triggerFetch(source?: string): Promise<FetchRun> {
+    let sources: string[];
     if (source) {
       if (this.shouldIgnoreSource(source)) {
-        this.logger.warn(`Cannot trigger fetch for ignored source: ${source}`);
-        return;
+        throw new BadRequestException(`Source '${source}' is ignored`);
       }
-      await this.fetchHotDataTask.execute(source);
+      if (!this.hotListsService.getAllSources().includes(source)) {
+        throw new NotFoundException(`Source '${source}' not found`);
+      }
+      sources = [source];
     } else {
+      await this.initializeSourceConfigs();
       const enabledConfigs = await this.sourceConfigRepository.findEnabled();
-      for (const config of enabledConfigs) {
-        if (this.shouldIgnoreSource(config.source)) {
-          this.logger.debug(`Skipping ignored source: ${config.source}`);
-          continue;
-        }
-        await this.fetchHotDataTask.execute(config.source);
+      sources = enabledConfigs
+        .map((config) => config.source)
+        .filter((name) => !this.shouldIgnoreSource(name));
+    }
+
+    this.pruneRuns(true);
+    const run: FetchRun = {
+      runId: randomUUID(),
+      status: 'running',
+      sourceCount: sources.length,
+      startedAt: new Date().toISOString(),
+    };
+    this.runs.set(run.runId, run);
+    void this.fetchHotDataTask.executeBatch(sources).then(
+      (results) => {
+        run.status = 'completed';
+        run.completedAt = new Date().toISOString();
+        run.results = results.map(({ items, ...summary }) => {
+          void items;
+          return {
+            ...summary,
+            error: summary.success ? undefined : 'Source refresh failed',
+          };
+        });
+      },
+      () => {
+        run.status = 'failed';
+        run.completedAt = new Date().toISOString();
+        run.error = 'Batch fetch failed';
+      },
+    );
+    return run;
+  }
+
+  getRun(runId: string): FetchRun {
+    this.pruneRuns();
+    const run = this.runs.get(runId);
+    if (!run) throw new NotFoundException(`Fetch run '${runId}' not found`);
+    return run;
+  }
+
+  private pruneRuns(ensureCapacity = false): void {
+    const cutoff = Date.now() - 60 * 60_000;
+    for (const [id, run] of this.runs) {
+      if (run.status !== 'running' && Date.parse(run.startedAt) < cutoff) {
+        this.runs.delete(id);
       }
+    }
+    while (ensureCapacity && this.runs.size >= 100) {
+      const oldest = [...this.runs].find(
+        ([, run]) => run.status !== 'running',
+      )?.[0];
+      if (!oldest) {
+        throw new ServiceUnavailableException('Too many active fetch runs');
+      }
+      this.runs.delete(oldest);
     }
   }
 

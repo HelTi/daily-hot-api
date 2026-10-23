@@ -33,7 +33,6 @@ export class WeatheralarmSource implements HotListSource {
       url,
       noCache: noCache ?? options.noCache,
     });
-    console.log(result);
     const list = result?.data?.data?.page?.list || [];
     const data: HotListItem[] = list.map((v) => ({
       id: v.alertid,

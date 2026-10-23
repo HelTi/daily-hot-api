@@ -1,6 +1,16 @@
-import { Controller, Get, Post, Put, Body, Param } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Put,
+  Body,
+  Param,
+  HttpCode,
+} from '@nestjs/common';
 import { SchedulerService } from './scheduler.service';
 import { SourceConfigRepository } from '../database/repositories/source-config.repository';
+import { UpdateSourceConfigDto } from './dto/update-source-config.dto';
+import { TriggerFetchDto } from './dto/trigger-fetch.dto';
 
 @Controller('api/scheduler')
 export class SchedulerController {
@@ -41,16 +51,21 @@ export class SchedulerController {
 
   // 手动触发数据抓取
   @Post('trigger')
-  async triggerFetch(@Body() body: { source?: string }) {
-    await this.schedulerService.triggerFetch(body.source);
-    return { message: 'Data fetch triggered' };
+  @HttpCode(202)
+  async triggerFetch(@Body() body: TriggerFetchDto) {
+    return this.schedulerService.triggerFetch(body?.source);
+  }
+
+  @Get('runs/:runId')
+  getRun(@Param('runId') runId: string) {
+    return this.schedulerService.getRun(runId);
   }
 
   // 更新数据源配置
   @Put('config/:source')
   async updateConfig(
     @Param('source') source: string,
-    @Body() config: { enabled?: boolean; interval?: number },
+    @Body() config: UpdateSourceConfigDto,
   ) {
     if (config.enabled !== undefined) {
       await this.sourceConfigRepository.setEnabled(source, config.enabled);

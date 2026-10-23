@@ -9,7 +9,7 @@ cp .env.example .env
 ## 推荐的开发配置
 
 ```dotenv
-PORT=6688
+PORT=6689
 ALLOWED_DOMAIN=*
 REDIS_HOST=127.0.0.1
 REDIS_PORT=6379
@@ -23,7 +23,7 @@ BRIEF_ENABLED=false
 ## 推荐的生产配置
 
 ```dotenv
-PORT=6688
+PORT=6689
 ALLOWED_DOMAIN=https://your-frontend.example.com
 REDIS_HOST=redis
 REDIS_PORT=6379

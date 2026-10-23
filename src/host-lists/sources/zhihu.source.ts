@@ -48,7 +48,7 @@ export class ZhihuSource implements HotListSource {
     noCache?: boolean,
   ): Promise<HotListGetListResponse> {
     try {
-      const result = await this.fetchFromAPI(noCache);
+      const result = await this.fetchFromAPI(noCache ?? false);
       return {
         data: result.data,
         params: {
@@ -68,7 +68,7 @@ export class ZhihuSource implements HotListSource {
 
       try {
         // 尝试使用备用方法
-        const result = await this.fetchFromFallbackAPI(noCache);
+        const result = await this.fetchFromFallbackAPI(noCache ?? false);
         return {
           data: result.data,
           params: {
@@ -164,7 +164,7 @@ export class ZhihuSource implements HotListSource {
           mobileUrl: `https://www.zhihu.com/question/${q_id}`,
         };
       })
-      .filter(Boolean);
+      .filter((item): item is NonNullable<typeof item> => item !== null);
 
     return {
       data: list,
@@ -229,7 +229,7 @@ export class ZhihuSource implements HotListSource {
           mobileUrl: `https://www.zhihu.com/question/${q_id}`,
         };
       })
-      .filter(Boolean);
+      .filter((item): item is NonNullable<typeof item> => item !== null);
 
     return {
       data: list,

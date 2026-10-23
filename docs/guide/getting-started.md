@@ -25,7 +25,7 @@ cp .env.example .env
 默认配置适合本地开发。至少确认 MongoDB 和 Redis 的地址与你本机环境一致：
 
 ```dotenv
-PORT=6688
+PORT=6689
 MONGODB_URI=mongodb://localhost:27017/daily-hot-api
 REDIS_HOST=127.0.0.1
 REDIS_PORT=6379
@@ -43,14 +43,15 @@ BRIEF_ENABLED=false
 npm run dev
 ```
 
-服务默认监听 `http://localhost:6688`。如果 `.env` 中将 `PORT` 设置为其他值，请同步替换后续示例的端口。
+服务默认监听 `http://localhost:6689`。如果 `.env` 中将 `PORT` 设置为其他值，请同步替换后续示例的端口。
 
 ## 验证
 
 检查服务状态：
 
 ```bash
-curl http://localhost:6688/health
+curl http://localhost:6689/health
+curl http://localhost:6689/ready
 ```
 
 正常响应包含：
@@ -75,13 +76,13 @@ Redis 不可用时，`status` 可能为 `degraded`，但不一定影响实时热
 获取全部可用来源：
 
 ```bash
-curl http://localhost:6688/hot-lists/all
+curl http://localhost:6689/hot-lists/all
 ```
 
 获取知乎热榜：
 
 ```bash
-curl 'http://localhost:6688/hot-lists/zhihu?limit=10'
+curl 'http://localhost:6689/hot-lists/zhihu?limit=10'
 ```
 
 ## 生产运行

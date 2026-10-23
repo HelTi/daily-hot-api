@@ -30,8 +30,8 @@ https://push2.eastmoney.com/api/qt/ulist.np/get
 ## API
 
 ```bash
-curl http://localhost:6688/hot-lists/eastmoney-stock
-curl 'http://localhost:6688/hot-lists/eastmoney-stock?limit=20'
+curl http://localhost:6689/hot-lists/eastmoney-stock
+curl 'http://localhost:6689/hot-lists/eastmoney-stock?limit=20'
 ```
 
 返回条目的 `url` 指向东方财富个股行情页，`mobileUrl` 指向东方财富移动端个股行情页。
@@ -46,5 +46,5 @@ npx eslint "src/**/*.ts"
 运行服务后可验证：
 
 ```bash
-curl http://localhost:6688/hot-lists/eastmoney-stock
+curl http://localhost:6689/hot-lists/eastmoney-stock
 ```

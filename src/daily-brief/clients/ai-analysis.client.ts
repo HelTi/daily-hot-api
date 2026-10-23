@@ -104,8 +104,23 @@ export class AiAnalysisClient {
             instruction: this.getJsonSchemaInstruction(),
             briefDate: input.briefDate,
             sources: input.sources,
-            hotItems: input.items,
-            searchEvidence: input.searchEvidence,
+            hotItems: input.items.slice(0, 60).map((item) => ({
+              ...item,
+              title: this.truncate(item.title, 160),
+              desc: this.truncate(item.desc ?? '', 280),
+              url: this.truncate(item.url, 500),
+              mobileUrl: this.truncate(item.mobileUrl ?? '', 500),
+            })),
+            searchEvidence: input.searchEvidence.slice(0, 12).map((item) => ({
+              topicTitle: this.truncate(item.topicTitle, 160),
+              query: this.truncate(item.query, 280),
+              results: item.results.slice(0, 3).map((result) => ({
+                ...result,
+                title: this.truncate(result.title, 160),
+                url: this.truncate(result.url, 500),
+                content: this.truncate(result.content ?? '', 300),
+              })),
+            })),
           }),
         },
       ],
@@ -121,6 +136,10 @@ export class AiAnalysisClient {
 
   getModel(): string {
     return this.config.aiModel;
+  }
+
+  private truncate(value: string, limit: number): string {
+    return value.length > limit ? value.slice(0, limit) : value;
   }
 
   private getJsonSchemaInstruction() {

@@ -71,12 +71,12 @@ export class ExampleSource implements HotListSource {
 
 ## 3. 注册 Provider
 
-在 `src/host-lists/hot-lists.module.ts` 中：
+在 `src/host-lists/sources/index.ts` 中：
 
 1. 导入 `ExampleSource`。
-2. 将 `ExampleSource` 加入 `providers` 数组。
+2. 将 `ExampleSource` 加入 `HOT_LIST_SOURCES` 数组。
 
-只有加入 Nest Provider 后，`DiscoveryService` 才能发现 `@HotSource` 元数据。
+`HotListsModule` 把该数组注册为 Nest Provider，`DiscoveryService` 才能发现 `@HotSource` 元数据。同名来源会在启动时失败；注册表测试也会检查数量与名称唯一性。新增来源后更新测试里的预期数量。
 
 ## 4. 缓存和错误处理
 
@@ -91,14 +91,15 @@ export class ExampleSource implements HotListSource {
 ```bash
 npm run build
 npx eslint "src/**/*.ts"
+npx jest --runInBand src/host-lists/sources/index.spec.ts
 ```
 
 启动服务后确认来源已注册：
 
 ```bash
-curl http://localhost:6688/hot-lists/all
-curl 'http://localhost:6688/hot-lists/example?limit=10'
-curl 'http://localhost:6688/hot-lists/example?noCache=true'
+curl http://localhost:6689/hot-lists/all
+curl 'http://localhost:6689/hot-lists/example?limit=10'
+curl 'http://localhost:6689/hot-lists/example?noCache=true'
 ```
 
 新增来源属于功能变更，还应在 `docs/development/sources/` 创建维护说明，记录上游地址、数据映射、特殊参数、失败模式和验证命令。

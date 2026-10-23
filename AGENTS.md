@@ -162,15 +162,15 @@ No endpoint has built-in authentication. `POST /api/briefs/generate` (spends AI 
 Examples:
 
 ```bash
-curl http://localhost:6688/api/briefs/config
+curl http://localhost:6689/api/briefs/config
 
-curl -X POST http://localhost:6688/api/briefs/generate \
+curl -X POST http://localhost:6689/api/briefs/generate \
   -H 'Content-Type: application/json' \
   -d '{"sources":["cls"],"period":"manual-test","force":true}'
 
-curl http://localhost:6688/api/briefs/latest
+curl http://localhost:6689/api/briefs/latest
 
-curl -X DELETE 'http://localhost:6688/api/briefs/history?olderThan=1m'
+curl -X DELETE 'http://localhost:6689/api/briefs/history?olderThan=1m'
 ```
 
 ## Hot List Sources
@@ -183,7 +183,7 @@ New sources should:
 - Use the `@HotSource` decorator.
 - Implement `HotListSource`.
 - Return data matching `HotListGetListResponse`.
-- Be registered in `src/host-lists/hot-lists.module.ts`.
+- Be added to `HOT_LIST_SOURCES` in `src/host-lists/sources/index.ts`.
 
 Source metadata is discovered by `HotListsService` using Nest `DiscoveryService`.
 
@@ -207,7 +207,7 @@ Aggregation pipelines must stay MongoDB 4.0 compatible. `src/database/repositori
 
 There are two scheduler areas:
 
-- `src/scheduler`: hot data fetching and Mongo backup.
+- `src/scheduler`: hot data fetching. MongoDB backup is an external operation documented in `docs/operations/volumes.md`.
 - `src/daily-brief/daily-brief.scheduler.ts`: AI daily brief generation.
 
 Both use `SchedulerRegistry` and cron jobs.
@@ -218,8 +218,8 @@ Avoid adding another `ScheduleModule.forRoot()` unless necessary. If refactoring
 
 Use these docs when working on or discussing frontend integration:
 
-- `docs/daily-brief.md`
-- `docs/daily-brief-frontend.md`
+- `docs/guide/daily-brief.md`
+- `docs/development/daily-brief-frontend.md`
 
 Frontend should not request `includeDebug=true` in normal user flows.
 

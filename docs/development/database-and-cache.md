@@ -31,7 +31,7 @@ src/database/
 - `DailyBrief`：`briefDate + period` 唯一索引、`createdAt` 倒序索引。
 
 ::: info 去重说明
-热点存储使用 `source + url` 识别同来源内容。Schema 注释称其为去重索引；修改写入逻辑时仍应通过 Repository 的 upsert 行为验证实际去重结果。
+热点存储使用 `{source, url}` 唯一索引与 `bulkWrite` 幂等写入。现有数据库必须先执行[唯一索引迁移](/operations/hot-item-index-migration)，再部署依赖该约束的写入逻辑。
 :::
 
 ## Redis 与内存缓存
@@ -57,8 +57,9 @@ Redis 客户端使用 `lazyConnect`，启动阶段不强制握手。`CacheServic
 ## 本地检查
 
 ```bash
-curl http://localhost:6688/health
-curl http://localhost:6688/api/history/stats
+curl http://localhost:6689/health
+curl http://localhost:6689/ready
+curl http://localhost:6689/api/history/stats
 ```
 
 Docker 环境下可以进入数据库检查集合：
@@ -69,7 +70,7 @@ docker compose exec mongodb mongosh daily-hot-api
 
 ```javascript
 show collections
-db.hot_items.find().limit(5)
+db.hotitems.find().limit(5)
 db.dailybriefs.find().sort({ createdAt: -1 }).limit(1)
 ```
 

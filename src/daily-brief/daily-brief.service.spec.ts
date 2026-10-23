@@ -16,10 +16,10 @@ describe('DailyBriefService stock ranking', () => {
     service = new DailyBriefService(
       { stockRankingCacheTtl: 43200 } as never,
       { getStockRanking } as never,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
+      undefined as never,
+      undefined as never,
+      undefined as never,
+      undefined as never,
       {
         get: cacheGet,
         set: cacheSet,
@@ -118,7 +118,8 @@ describe('DailyBriefService stock ranking', () => {
 
 describe('DailyBriefService generateBrief', () => {
   const findByDate = jest.fn();
-  const upsertGenerating = jest.fn();
+  const claimGeneration = jest.fn();
+  const heartbeatGeneration = jest.fn();
   const markSuccess = jest.fn();
   const markFailed = jest.fn();
   const saveHotItems = jest.fn();
@@ -127,6 +128,8 @@ describe('DailyBriefService generateBrief', () => {
   const analyzeDailyBrief = jest.fn();
   const search = jest.fn();
   const cacheDelByPattern = jest.fn();
+  const cacheGet = jest.fn();
+  const cacheSet = jest.fn();
   let config: Record<string, unknown>;
   let service: DailyBriefService;
 
@@ -153,7 +156,8 @@ describe('DailyBriefService generateBrief', () => {
       generatingTimeoutMinutes: 30,
     };
     findByDate.mockReset().mockResolvedValue(null);
-    upsertGenerating.mockReset().mockResolvedValue(undefined);
+    claimGeneration.mockReset().mockResolvedValue(true);
+    heartbeatGeneration.mockReset().mockResolvedValue(undefined);
     markSuccess
       .mockReset()
       .mockImplementation((briefDate: string) =>
@@ -162,7 +166,7 @@ describe('DailyBriefService generateBrief', () => {
     markFailed.mockReset().mockResolvedValue(undefined);
     saveHotItems.mockReset().mockResolvedValue(0);
     getDataByTimeRange.mockReset().mockResolvedValue([]);
-    getHotList.mockReset().mockResolvedValue({ data: [] });
+    getHotList.mockReset().mockResolvedValue({ success: false, items: [] });
     analyzeDailyBrief.mockReset().mockResolvedValue({
       summary: '结论',
       highlights: [],
@@ -173,21 +177,36 @@ describe('DailyBriefService generateBrief', () => {
     });
     search.mockReset().mockResolvedValue([]);
     cacheDelByPattern.mockReset().mockResolvedValue(undefined);
+    cacheGet.mockReset().mockResolvedValue(null);
+    cacheSet.mockReset().mockResolvedValue(undefined);
 
     service = new DailyBriefService(
       config as never,
-      { findByDate, upsertGenerating, markSuccess, markFailed } as never,
+      {
+        findByDate,
+        claimGeneration,
+        heartbeatGeneration,
+        markSuccess,
+        markFailed,
+      } as never,
       { saveHotItems, getDataByTimeRange } as never,
-      { getHotList } as never,
+      { execute: getHotList } as never,
       { getModel: () => 'test-model', analyzeDailyBrief } as never,
       { search } as never,
-      { delByPattern: cacheDelByPattern } as never,
+      {
+        get: cacheGet,
+        set: cacheSet,
+        delByPattern: cacheDelByPattern,
+      } as never,
     );
   });
 
   it('caps input items by the requested source count, not the configured one', async () => {
     // 配置里默认有 3 个源，这里只请求 1 个：上限应为 1 * 2 = 2
-    getHotList.mockResolvedValue({ data: buildItems('fetched', 5) });
+    getHotList.mockResolvedValue({
+      success: true,
+      items: buildItems('fetched', 5),
+    });
     getDataByTimeRange.mockResolvedValue(buildItems('history', 5));
 
     await service.generateBrief({ sources: ['cls'], force: true });
@@ -201,16 +220,46 @@ describe('DailyBriefService generateBrief', () => {
     expect(items).toHaveLength(2);
   });
 
+  it('interleaves sources and searches a shared title only once', async () => {
+    getHotList.mockImplementation((source: string) =>
+      Promise.resolve({
+        success: true,
+        items:
+          source === 'cls'
+            ? buildItems('cls', 4)
+            : [
+                {
+                  ...buildItems('eastmoney', 1)[0],
+                  title: 'cls-标题-0',
+                },
+              ],
+      }),
+    );
+
+    await service.generateBrief({ sources: ['cls', 'eastmoney'], force: true });
+
+    const items = analyzeDailyBrief.mock.calls[0][0].items as Array<{
+      source: string;
+    }>;
+    expect(items.map((item) => item.source)).toEqual([
+      'cls',
+      'eastmoney',
+      'cls',
+    ]);
+    expect(search).toHaveBeenCalledTimes(2);
+  });
+
   it('rejects a concurrent request while a fresh generation is in flight', async () => {
     findByDate.mockResolvedValue({
       status: 'generating',
       updatedAt: new Date(),
     });
+    claimGeneration.mockResolvedValue(false);
 
     await expect(service.generateBrief({})).rejects.toBeInstanceOf(
       BadRequestException,
     );
-    expect(upsertGenerating).not.toHaveBeenCalled();
+    expect(analyzeDailyBrief).not.toHaveBeenCalled();
   });
 
   it('regenerates when a generating brief is older than the staleness timeout', async () => {
@@ -218,19 +267,25 @@ describe('DailyBriefService generateBrief', () => {
       status: 'generating',
       updatedAt: new Date(Date.now() - 31 * 60000),
     });
-    getHotList.mockResolvedValue({ data: buildItems('fetched', 2) });
+    getHotList.mockResolvedValue({
+      success: true,
+      items: buildItems('fetched', 2),
+    });
 
     await expect(service.generateBrief({})).resolves.toEqual({
       briefDate: expect.any(String),
       status: 'success',
     });
-    expect(upsertGenerating).toHaveBeenCalledTimes(1);
+    expect(claimGeneration).toHaveBeenCalledTimes(1);
     expect(analyzeDailyBrief).toHaveBeenCalledTimes(1);
   });
 
   it('treats a generating brief with no updatedAt as stale', async () => {
     findByDate.mockResolvedValue({ status: 'generating' });
-    getHotList.mockResolvedValue({ data: buildItems('fetched', 2) });
+    getHotList.mockResolvedValue({
+      success: true,
+      items: buildItems('fetched', 2),
+    });
 
     await service.generateBrief({});
 
@@ -243,14 +298,21 @@ describe('DailyBriefService generateBrief', () => {
       status: 'generating',
       updatedAt: new Date(Date.now() - 31 * 60000),
     });
+    claimGeneration.mockResolvedValue(false);
 
     await expect(service.generateBrief({})).rejects.toBeInstanceOf(
       BadRequestException,
     );
+    expect(claimGeneration.mock.calls[0][0].staleBefore).toEqual(
+      expect.any(Date),
+    );
   });
 
   it('marks the brief failed when analysis throws', async () => {
-    getHotList.mockResolvedValue({ data: buildItems('fetched', 2) });
+    getHotList.mockResolvedValue({
+      success: true,
+      items: buildItems('fetched', 2),
+    });
     analyzeDailyBrief.mockRejectedValue(new Error('AI exploded'));
 
     await expect(service.generateBrief({ force: true })).rejects.toThrow(
@@ -259,6 +321,7 @@ describe('DailyBriefService generateBrief', () => {
     expect(markFailed).toHaveBeenCalledWith(
       expect.any(String),
       'daily',
+      expect.any(String),
       'AI exploded',
     );
   });

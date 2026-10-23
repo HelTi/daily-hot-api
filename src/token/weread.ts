@@ -13,10 +13,10 @@ const getWereadID = (bookId: string) => {
     // 取哈希结果的前三个字符作为初始值
     let strSub = str.substring(0, 3);
     // 判断书籍 ID 的类型并进行转换
-    let fa: (string | any[])[];
+    let fa: [string, string[]];
     if (/^\d*$/.test(bookId)) {
       // 如果书籍 ID 只包含数字，则将其拆分成长度为 9 的子字符串，并转换为十六进制表示
-      const chunks = [];
+      const chunks: string[] = [];
       for (let i = 0; i < bookId.length; i += 9) {
         const chunk = bookId.substring(i, i + 9);
         chunks.push(parseInt(chunk).toString(16));

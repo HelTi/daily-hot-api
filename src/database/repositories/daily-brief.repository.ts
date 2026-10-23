@@ -81,6 +81,8 @@ export class DailyBriefRepository {
   private readonly publicProjection = {
     rawInputItems: 0,
     searchEvidence: 0,
+    generationId: 0,
+    generationHeartbeatAt: 0,
   };
 
   constructor(
@@ -447,35 +449,66 @@ export class DailyBriefRepository {
     };
   }
 
-  async upsertGenerating(data: {
+  async claimGeneration(data: {
     briefDate: string;
     period: string;
     sources: string[];
     inputWindow: { start: Date; end: Date; lookbackHours: number };
     model?: string;
-  }) {
-    return this.dailyBriefModel
-      .findOneAndUpdate(
-        { briefDate: data.briefDate, period: data.period },
-        {
-          $set: {
-            ...data,
-            status: 'generating',
-            error: undefined,
-            updatedAt: new Date(),
+    generationId: string;
+    staleBefore: Date;
+  }): Promise<boolean> {
+    try {
+      const claimed = await this.dailyBriefModel
+        .findOneAndUpdate(
+          {
+            briefDate: data.briefDate,
+            period: data.period,
+            $or: [
+              { generationId: { $exists: false } },
+              { generationId: null },
+              { generationHeartbeatAt: { $lt: data.staleBefore } },
+            ],
           },
-          $setOnInsert: {
-            createdAt: new Date(),
+          {
+            $set: {
+              generationId: data.generationId,
+              generationHeartbeatAt: new Date(),
+            },
+            $setOnInsert: {
+              status: 'generating',
+              sources: data.sources,
+              inputWindow: data.inputWindow,
+              model: data.model,
+              createdAt: new Date(),
+            },
           },
-        },
-        { upsert: true, new: true },
-      )
-      .lean();
+          { upsert: true, new: true },
+        )
+        .lean();
+      return claimed?.generationId === data.generationId;
+    } catch (error) {
+      // 已有活动生成任务时，带 $or 的 upsert 会撞上日期/周期唯一索引。
+      if ((error as { code?: number }).code === 11000) return false;
+      throw error;
+    }
+  }
+
+  async heartbeatGeneration(
+    briefDate: string,
+    period: string,
+    generationId: string,
+  ) {
+    await this.dailyBriefModel.updateOne(
+      { briefDate, period, generationId },
+      { $set: { generationHeartbeatAt: new Date() } },
+    );
   }
 
   async markSuccess(
     briefDate: string,
     period: string,
+    generationId: string,
     data: {
       analysis: Record<string, unknown>;
       markdown: string;
@@ -483,17 +516,23 @@ export class DailyBriefRepository {
       searchEvidence: Record<string, unknown>[];
       model?: string;
       tavilyUsed: boolean;
+      sources: string[];
+      inputWindow: { start: Date; end: Date; lookbackHours: number };
     },
   ) {
     return this.dailyBriefModel
       .findOneAndUpdate(
-        { briefDate, period },
+        { briefDate, period, generationId },
         {
           $set: {
             ...data,
             status: 'success',
-            error: undefined,
             updatedAt: new Date(),
+          },
+          $unset: {
+            error: 1,
+            generationId: 1,
+            generationHeartbeatAt: 1,
           },
         },
         { new: true },
@@ -501,16 +540,31 @@ export class DailyBriefRepository {
       .lean();
   }
 
-  async markFailed(briefDate: string, period: string, error: string) {
+  async markFailed(
+    briefDate: string,
+    period: string,
+    generationId: string,
+    error: string,
+  ) {
+    const previousSuccess = await this.dailyBriefModel
+      .findOneAndUpdate(
+        { briefDate, period, generationId, status: 'success' },
+        { $unset: { generationId: 1, generationHeartbeatAt: 1 } },
+        { new: true },
+      )
+      .lean();
+    if (previousSuccess) return previousSuccess;
+
     return this.dailyBriefModel
       .findOneAndUpdate(
-        { briefDate, period },
+        { briefDate, period, generationId },
         {
           $set: {
             status: 'failed',
             error,
             updatedAt: new Date(),
           },
+          $unset: { generationId: 1, generationHeartbeatAt: 1 },
         },
         { new: true },
       )

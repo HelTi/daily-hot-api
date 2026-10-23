@@ -39,7 +39,7 @@ export class GuokrSource implements HotListSource {
     noCache?: boolean,
   ): Promise<HotListGetListResponse> {
     try {
-      const result = await this.fetchFromAPI(noCache);
+      const result = await this.fetchFromAPI(noCache ?? false);
       return {
         data: result.data,
         params: {

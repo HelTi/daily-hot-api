@@ -23,9 +23,18 @@ export interface SearchHistoryResult {
   totalPages: number;
 }
 
+type HistoryStats = {
+  totalCount: number;
+  totalSources: number;
+  sources: { _id: string; count: number; latestTimestamp: number }[];
+};
+
 @Injectable()
 export class HotItemRepository {
   private readonly logger = new Logger(HotItemRepository.name);
+  private statsCache?: { value: HistoryStats; expiresAt: number };
+  private statsInFlight?: Promise<HistoryStats>;
+  private statsVersion = 0;
 
   constructor(
     @InjectModel(HotItem.name) private hotItemModel: Model<HotItemDocument>,
@@ -57,11 +66,15 @@ export class HotItemRepository {
       return null;
     }
 
+    if (!item.url || typeof item.url !== 'string' || !item.url.trim()) {
+      return null;
+    }
+
     return {
       ...item,
       title: item.title.trim(),
       desc: item.desc?.trim() || '',
-      url: item.url,
+      url: item.url.trim(),
       mobileUrl: item.mobileUrl,
       author: item.author?.trim() || '',
       hot: item.hot || 0,
@@ -96,72 +109,51 @@ export class HotItemRepository {
       return 0;
     }
 
-    // 2. 处理相同URL的情况
-    const urlCountMap = new Map<string, number>();
-    const processedItems = validItems.map((item) => {
-      const baseUrl = item.url;
-      const count = urlCountMap.get(baseUrl) || 0;
-      urlCountMap.set(baseUrl, count + 1);
-
-      return {
-        ...item,
-      };
+    // 同一批次同一 URL 只保留排名靠前的条目，避免重复 upsert 计数失真。
+    const seenUrls = new Set<string>();
+    const uniqueItems = validItems.filter((item) => {
+      if (seenUrls.has(item.url)) return false;
+      seenUrls.add(item.url);
+      return true;
     });
-
-    // 3. 批量检查数据库中的重复数据
-    const urls = processedItems.map((item) => item.url);
-    const duplicateUrls = await this.getDuplicateUrls(source, urls);
-
-    // 4. 过滤出非重复的数据
-    const newItems = processedItems.filter(
-      (item) => !duplicateUrls.has(item.url),
-    );
-
-    if (newItems.length === 0) return 0;
-
-    // 5. 准备插入的文档
-    const documents = newItems.map((item) => ({
-      ...item,
-      source,
-      timestamp: item.timestamp || Date.now(),
-      createdAt: new Date(),
-      updatedAt: new Date(),
+    const now = new Date();
+    const operations = uniqueItems.map((item) => ({
+      updateOne: {
+        filter: { source, url: item.url },
+        update: {
+          $setOnInsert: {
+            ...item,
+            source,
+            timestamp: item.timestamp || now.getTime(),
+            createdAt: now,
+            updatedAt: now,
+          },
+        },
+        upsert: true,
+      },
     }));
 
     try {
-      // 6. 使用 upsert 策略，避免重复数据问题
-      this.logger.debug(
-        `Attempting to insert ${documents.length} documents for source: ${source}`,
-      );
-
-      // 逐个插入，使用 upsert 策略
-      let insertedCount = 0;
-      for (const doc of documents) {
-        try {
-          const result = await this.hotItemModel.findOneAndUpdate(
-            { source: doc.source, url: doc.url },
-            doc,
-            { upsert: true, new: true },
-          );
-          if (result) {
-            insertedCount++;
-          }
-        } catch (singleError) {
-          this.logger.warn(
-            `Failed to insert single document for ${source}:`,
-            singleError,
-          );
-          // 继续处理下一个文档
-        }
+      const result = await this.hotItemModel.bulkWrite(operations, {
+        ordered: false,
+        timestamps: false,
+      });
+      if (result.upsertedCount > 0) this.invalidateStats();
+      return result.upsertedCount;
+    } catch (error: unknown) {
+      const result = (error as { result?: { upsertedCount?: number } }).result;
+      if ((result?.upsertedCount ?? 0) > 0) this.invalidateStats();
+      // 并发 upsert 可能撞上另一写入者刚插入的唯一键。仅忽略这些竞争错误。
+      const writeErrors = (error as { writeErrors?: Array<{ code: number }> })
+        ?.writeErrors;
+      if (
+        writeErrors?.length &&
+        writeErrors.every((item) => item.code === 11000)
+      ) {
+        return result?.upsertedCount ?? 0;
       }
-      this.logger.log(
-        `Successfully saved ${insertedCount} items for source: ${source} (${originalCount} -> ${validCount} -> ${insertedCount})`,
-      );
-      return insertedCount;
-    } catch (error: any) {
-      console.error('Insert error:', error);
       this.logger.error(`Failed to save items for source ${source}:`, error);
-      return 0;
+      throw error;
     }
   }
 
@@ -188,10 +180,14 @@ export class HotItemRepository {
     }
 
     if (keyword) {
-      // 使用正则表达式进行模糊搜索，支持title和desc字段
+      if (keyword.length > 100) {
+        throw new Error('keyword must be at most 100 characters');
+      }
+      const literalKeyword = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      // 将用户输入作为普通文本匹配，避免正则语法错误和模式注入。
       query.$or = [
-        { title: { $regex: keyword, $options: 'i' } },
-        { desc: { $regex: keyword, $options: 'i' } },
+        { title: { $regex: literalKeyword, $options: 'i' } },
+        { desc: { $regex: literalKeyword, $options: 'i' } },
       ];
     }
 
@@ -234,11 +230,33 @@ export class HotItemRepository {
   }
 
   // 获取数据统计
-  async getStats(): Promise<{
-    totalCount: number;
-    totalSources: number;
-    sources: { _id: string; count: number; latestTimestamp: number }[];
-  }> {
+  async getStats(): Promise<HistoryStats> {
+    if (this.statsCache && this.statsCache.expiresAt > Date.now()) {
+      return this.statsCache.value;
+    }
+    if (this.statsInFlight !== undefined) return this.statsInFlight;
+
+    const version = this.statsVersion;
+    const pending = this.loadStats();
+    this.statsInFlight = pending;
+    try {
+      const stats = await pending;
+      if (version === this.statsVersion) {
+        this.statsCache = { value: stats, expiresAt: Date.now() + 30_000 };
+      }
+      return stats;
+    } finally {
+      if (this.statsInFlight === pending) this.statsInFlight = undefined;
+    }
+  }
+
+  private invalidateStats(): void {
+    this.statsVersion++;
+    this.statsCache = undefined;
+    this.statsInFlight = undefined;
+  }
+
+  private async loadStats(): Promise<HistoryStats> {
     const stats = await this.hotItemModel.aggregate([
       {
         $group: {

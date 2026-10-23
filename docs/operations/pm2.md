@@ -42,9 +42,9 @@ npx pm2 restart daily-hot-api --update-env
 重启后检查：
 
 ```bash
-curl http://localhost:6688/health
-curl http://localhost:6688/api/scheduler/status
-curl http://localhost:6688/api/briefs/scheduler/status
+curl http://localhost:6689/health
+curl http://localhost:6689/api/scheduler/status
+curl http://localhost:6689/api/briefs/scheduler/status
 ```
 
 ## 开机启动

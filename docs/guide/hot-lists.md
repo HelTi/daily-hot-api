@@ -9,7 +9,7 @@ GET /hot-lists/all
 ```
 
 ```bash
-curl http://localhost:6688/hot-lists/all
+curl http://localhost:6689/hot-lists/all
 ```
 
 响应中的 `name` 是后续请求使用的来源 ID：
@@ -32,7 +32,7 @@ GET /hot-lists/:source
 ```
 
 ```bash
-curl 'http://localhost:6688/hot-lists/zhihu?limit=10'
+curl 'http://localhost:6689/hot-lists/zhihu?limit=10'
 ```
 
 通用查询参数：
@@ -45,6 +45,8 @@ curl 'http://localhost:6688/hot-lists/zhihu?limit=10'
 | `type` | string | 部分来源支持的榜单类别 |
 
 不同来源还可能声明额外参数，可查看响应中的 `params` 字段。
+
+当前支持的来源特定查询参数包括：纽约时报 `area`、历史上的今天 `month/day`、气象预警 `province`、虎扑 `page/pageSize/cursor`、米游社 `game`。这些参数按字符串传入；未知参数会被全局校验拒绝并返回 400。新增来源参数时需同步扩展 `HotListQueryDto`。
 
 典型 JSON 响应：
 
@@ -75,7 +77,7 @@ curl 'http://localhost:6688/hot-lists/zhihu?limit=10'
 单次请求 RSS：
 
 ```bash
-curl 'http://localhost:6688/hot-lists/zhihu?rss=true'
+curl 'http://localhost:6689/hot-lists/zhihu?rss=true'
 ```
 
 也可以设置 `RSS_MODE=true`，让所有热榜请求默认返回 RSS。RSS 响应的 `Content-Type` 为 `application/xml; charset=utf-8`。
