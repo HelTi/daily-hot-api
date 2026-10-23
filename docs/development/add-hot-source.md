@@ -84,6 +84,7 @@ export class ExampleSource implements HotListSource {
 - 将控制器传入的 `noCache` 继续传给 HTTP 客户端。
 - 对上游字段做运行时防御，避免单条异常数据导致整个来源失败。
 - 上游需要签名或 Token 时，将可复用逻辑放入 `src/token`。
+- 上游要求的防缓存戳或签名字段若不在 `VOLATILE_REQUEST_KEYS` / `VOLATILE_HEADER_KEYS` 中，该来源不会命中缓存，需要补充字段名，见[上游请求缓存键](/development/database-and-cache#上游请求缓存键)。
 - 不要在源码、日志或文档里写入 Cookie、密钥和用户凭据。
 
 ## 5. 验证

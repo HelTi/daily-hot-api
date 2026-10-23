@@ -10,6 +10,30 @@ type ResponseData<T> = {
   fromCache: boolean;
 } & CacheData<T>;
 
+/**
+ * 不参与缓存身份的查询参数和请求体字段：防缓存时间戳、签名和一次性 token。
+ * 这些值每次请求都变，算进缓存键会让缓存永不命中，并按请求数堆积 Redis 键。
+ */
+const VOLATILE_REQUEST_KEYS = new Set([
+  '_',
+  '_signature',
+  '_t',
+  'mstoken',
+  'nonce',
+  'sign',
+  'signature',
+  'timestamp',
+  'token',
+  'w_rid',
+  'wts',
+]);
+
+/**
+ * 不参与缓存身份的请求头：本项目的 Cookie 和 UA 只用于绕过反爬，不决定响应内容，
+ * 其中 Cookie 常含随机串、UA 缺省时还会由本服务在算键之后随机生成。
+ */
+const VOLATILE_HEADER_KEYS = new Set(['cookie', 'user-agent', 'x-udid']);
+
 // Custom error classes
 export class HttpRequestError extends Error {
   constructor(
@@ -90,22 +114,57 @@ export class HttpClientService {
     return JSON.stringify(value) ?? 'null';
   }
 
+  private isVolatileKey(key: string): boolean {
+    return VOLATILE_REQUEST_KEYS.has(key.toLowerCase());
+  }
+
+  private stableHeaders(headers?: Record<string, string>) {
+    return Object.fromEntries(
+      Object.entries(headers ?? {})
+        .map(([key, value]): [string, string] => [key.toLowerCase(), value])
+        .filter(([key]) => !VOLATILE_HEADER_KEYS.has(key)),
+    );
+  }
+
+  private stableData(data?: Record<string, unknown>) {
+    if (!data) return undefined;
+    return Object.fromEntries(
+      Object.entries(data).filter(([key]) => !this.isVolatileKey(key)),
+    );
+  }
+
+  /**
+   * 请求的缓存身份：方法 + 地址（不含查询串） + 稳定查询 + 请求体 + 响应类型。
+   * URL 自带的查询串和 `params` 合并后排序，因此参数顺序和书写位置不影响命中。
+   */
   private cacheKey(
     method: 'GET' | 'POST',
     options: HttpGetOptions | HttpPostOptions,
   ): string {
-    const headers = Object.fromEntries(
-      Object.entries(options.headers ?? {}).map(([key, value]) => [
-        key.toLowerCase(),
-        value,
-      ]),
-    );
+    const query: Array<[string, unknown]> = [];
+    let url = options.url;
+
+    try {
+      const parsed = new URL(options.url);
+      for (const [key, value] of parsed.searchParams) {
+        if (!this.isVolatileKey(key)) query.push([key, value]);
+      }
+      url = `${parsed.origin}${parsed.pathname}`;
+    } catch {
+      // 非法 URL 保留原文，交给请求阶段报错。
+    }
+
+    const params = 'params' in options ? options.params : undefined;
+    for (const [key, value] of Object.entries(params ?? {})) {
+      if (!this.isVolatileKey(key)) query.push([key, value]);
+    }
+
     const request = {
       method,
-      url: options.url,
-      headers,
-      params: 'params' in options ? options.params : undefined,
-      data: 'data' in options ? options.data : undefined,
+      url,
+      query: query.sort(([a], [b]) => a.localeCompare(b)),
+      headers: this.stableHeaders(options.headers),
+      data: 'data' in options ? this.stableData(options.data) : undefined,
       responseType:
         'responseType' in options ? options.responseType : undefined,
     };
