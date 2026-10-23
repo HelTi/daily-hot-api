@@ -32,7 +32,9 @@ export const configValidationSchema = z.object({
     .default('cls,yicai,wallstreet,jin10,tonghuashun,eastmoney,gelonghui'),
   BRIEF_LOOKBACK_HOURS: z.coerce.number().default(24),
   BRIEF_TOP_ITEMS_PER_SOURCE: z.coerce.number().default(10),
-  BRIEF_MAX_TOPICS: z.coerce.number().default(12),
+  // 上限与 ai-analysis.client.ts 的 PROMPT_BUDGET.maxTopics 对齐：
+  // 超出的主题进不了提示词，只会白付 Tavily 费用，所以启动时就拒绝。
+  BRIEF_MAX_TOPICS: z.coerce.number().int().min(1).max(12).default(12),
   // 下限 1：之前靠 service 里的 `ttl > 0 ? ttl : 默认值` 兜底，改为启动时直接拒绝非法值
   BRIEF_STOCK_RANKING_CACHE_TTL: z.coerce.number().min(1).default(43200),
   BRIEF_GENERATING_TIMEOUT_MINUTES: z.coerce.number().min(1).default(30),

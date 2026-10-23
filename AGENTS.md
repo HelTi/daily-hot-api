@@ -59,15 +59,15 @@ PORT=6699 BRIEF_ENABLED=false npm run start:prod
 
 ## Configuration
 
-Config is defined in:
+Defaults and validation rules live only in `src/config/validation.schema.ts`. `src/config/configuration.ts` just parses `process.env` through that schema, so it needs no edit when adding a variable.
 
-- `src/config/configuration.ts`
+When adding a new environment variable, update:
+
 - `src/config/validation.schema.ts`
 - `.env.example`
+- `docs/reference/environment-variables.md`
 
-When adding a new environment variable, update all three places.
-
-Daily brief code must not call `ConfigService` directly. Read settings through `DailyBriefConfigService` (`src/daily-brief/daily-brief.config.ts`), which uses `getOrThrow` so defaults live only in `configuration.ts` / `validation.schema.ts`. When adding a daily brief variable, add a typed getter there too.
+Daily brief code must not call `ConfigService` directly. Read settings through `DailyBriefConfigService` (`src/daily-brief/daily-brief.config.ts`), which uses `getOrThrow` so defaults live only in `validation.schema.ts`. When adding a daily brief variable, add a typed getter there too.
 
 Daily brief variables:
 
@@ -121,10 +121,10 @@ src/database/repositories/daily-brief.repository.ts
 Behavior:
 
 - Reads configured sources from `BRIEF_SOURCES`.
-- Refreshes configured hot list sources before generating.
-- Saves fetched hot items to the existing history repository.
+- Refreshes configured hot list sources through `FetchHotDataTask`, so a source disabled in `source_configs` is skipped and only logged as a warning. `BRIEF_SOURCES` alone does not enable a source.
+- Saves fetched hot items to the existing history repository. Saved items are first-seen snapshots: `$setOnInsert` only, so `hot` / `title` / `timestamp` never change after the first write.
 - Analyzes only the first `BRIEF_TOP_ITEMS_PER_SOURCE` items per source. Current default is 10.
-- Uses Tavily to enrich up to `BRIEF_MAX_TOPICS` candidate topics, at most `BRIEF_SEARCH_CONCURRENCY` at a time.
+- Uses Tavily to enrich up to `BRIEF_MAX_TOPICS` candidate topics, at most `BRIEF_SEARCH_CONCURRENCY` at a time. `PROMPT_BUDGET` in `src/daily-brief/clients/ai-analysis.client.ts` caps what reaches the model (60 items, 12 evidence blocks); `BRIEF_MAX_TOPICS` is validated against that cap, so raising it past 12 fails at startup instead of being truncated silently.
 - Uses the OpenAI SDK with `OPENAI_API_BASE_URL` and `AI_MODEL`.
 - All external calls are bounded: `TAVILY_TIMEOUT_MS` per search, `AI_TIMEOUT_MS` / `AI_MAX_RETRIES` per analysis.
 - Rejects an analysis without a summary or without topics, so an empty AI response is recorded as `failed` rather than `success`.

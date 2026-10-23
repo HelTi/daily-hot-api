@@ -6,7 +6,7 @@ import {
 } from '../database/repositories/daily-brief.repository';
 import { HotItemRepository } from '../database/repositories/hot-item.repository';
 import { FetchHotDataTask } from '../scheduler/tasks/fetch-hot-data.task';
-import { AiAnalysisClient } from './clients/ai-analysis.client';
+import { AiAnalysisClient, PROMPT_BUDGET } from './clients/ai-analysis.client';
 import { TavilySearchClient } from './clients/tavily-search.client';
 import {
   BriefInputItem,
@@ -352,6 +352,12 @@ export class DailyBriefService {
         try {
           const refreshed = await this.fetchHotDataTask.execute(source);
           if (!refreshed.success || !refreshed.items?.length) {
+            // 被调度器禁用、源损坏和源确实没数据是三种情况，日志里必须能区分。
+            this.logger.warn(
+              `Brief source ${source} contributed no fresh items: ${
+                refreshed.error ?? 'empty result'
+              }`,
+            );
             return [];
           }
 
@@ -463,7 +469,7 @@ export class DailyBriefService {
         seenTitles.add(title);
         return true;
       })
-      .slice(0, Math.min(this.config.maxTopics, 12));
+      .slice(0, Math.min(this.config.maxTopics, PROMPT_BUDGET.maxTopics));
 
     return mapWithConcurrency(
       candidates,

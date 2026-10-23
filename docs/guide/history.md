@@ -129,9 +129,10 @@ PUT /api/scheduler/config/{source}
 ## 功能特性
 
 ### 数据去重
-- 基于 `source + url` 的组合进行去重
+- 基于 `source + url` 的组合进行去重，由唯一索引与 `bulkWrite` 保证
 - 避免存储重复的热点内容
 - 提高存储效率
+- 已存在的记录不会被后续抓取改写：历史条目是**首次抓取时的快照**，`hot`、`title` 和 `timestamp` 都保持首次入库时的值，详见[历史条目是首次抓取的快照](/development/database-and-cache#历史条目是首次抓取的快照)
 
 ### 数据源过滤
 - 支持通过 `IGNORE_SAVE_SOURCES` 环境变量配置忽略的数据源
