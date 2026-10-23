@@ -54,6 +54,27 @@ Redis 客户端使用 `lazyConnect`，启动阶段不强制握手。`CacheServic
 - 不同业务可以使用不同 TTL，例如股票历史排名由 `BRIEF_STOCK_RANKING_CACHE_TTL` 控制。
 - 写入或删除影响统计结果的数据后，应同步清理对应缓存。
 
+## 上游请求缓存键
+
+`HttpClientService` 把每次上游请求的缓存键算成 `http:<sha256>`，参与计算的是请求方法、不含查询串的地址、稳定查询、请求头、请求体和 `responseType`。URL 自带的查询串会和 `params` 合并后排序，因此参数顺序和写在 URL 还是 `params` 里都不影响命中。
+
+以下字段**不参与**缓存身份，因为它们每次请求都变，算进键会让缓存永不命中并按请求数堆积 Redis 键：
+
+- 查询参数和请求体顶层字段：`_`、`_t`、`_signature`、`msToken`、`nonce`、`sign`、`signature`、`timestamp`、`token`、`w_rid`、`wts`（大小写不敏感）。
+- 请求头：`Cookie`、`User-Agent`、`X-UDID`。本项目的 Cookie 和 UA 只用于绕过反爬，不决定响应内容，UA 缺省时还会由 `HttpClientService` 随机生成。
+
+新增来源时，如果上游要求的防缓存戳或签名字段不在上面的列表里，需要把字段名加进 `src/http/http.service.ts` 的 `VOLATILE_REQUEST_KEYS` / `VOLATILE_HEADER_KEYS`，否则该来源不会命中缓存。反过来，真正用于选择内容的参数（如 `page`、`month`、`area`）必须留在键里。
+
+验证某个来源是否命中缓存：
+
+```bash
+curl -s 'http://localhost:6689/hot-lists/zhihu' | grep -o '"fromCache":[a-z]*'
+curl -s 'http://localhost:6689/hot-lists/zhihu' | grep -o '"fromCache":[a-z]*'
+redis-cli --scan --pattern 'http:*' | wc -l
+```
+
+第二次请求应返回 `"fromCache":true`，并且键数量不随请求次数增长。
+
 ## 本地检查
 
 ```bash
