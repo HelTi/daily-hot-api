@@ -28,6 +28,14 @@ npm ci || handle_error "npm ci 失败"
 log "正在构建项目..."
 npm run build || handle_error "构建失败"
 
+# ecosystem.config.cjs 带 NODE_ENV=production，此时 MONGODB_URI 必填。
+# 缺失时应用会在启动阶段反复崩溃，pm2 重试到上限后置为 errored，
+# 因此在启动前就地检查，避免只看到一串重启记录。
+log "正在检查生产必填配置..."
+if [ -z "$MONGODB_URI" ] && ! grep -qE '^[[:space:]]*MONGODB_URI=.+' .env 2>/dev/null; then
+    handle_error "缺少 MONGODB_URI：请在 .env 中设置（参考 .env.example），或先 export MONGODB_URI 再执行本脚本"
+fi
+
 # 检查 pm2 是否安装
 if ! pm2 -v > /dev/null 2>&1; then
     log "pm2 未安装，正在安装..."
@@ -36,8 +44,10 @@ fi
 
 # 使用 pm2 重启或启动项目
 log "正在启动/重启服务..."
-pm2 restart daily-hot-api || pm2 start ecosystem.config.cjs || handle_error "PM2 启动失败"
+pm2 restart daily-hot-api --update-env || pm2 start ecosystem.config.cjs || handle_error "PM2 启动失败"
 
-echo "部署地址: http://127.0.0.1:6689"
+# 端口由 .env 的 PORT 决定，ecosystem.config.cjs 不再覆盖它
+DEPLOY_PORT=$(grep -E '^[[:space:]]*PORT=' .env 2>/dev/null | tail -1 | cut -d= -f2 | tr -d '"'"'"' ' || true)
+echo "部署地址: http://127.0.0.1:${DEPLOY_PORT:-6689}"
 
 log "部署完成!"

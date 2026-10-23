@@ -19,7 +19,7 @@
 | `REDIS_PORT` | `6379` | Redis 端口 |
 | `REDIS_PASSWORD` | 空 | Redis 密码 |
 | `CACHE_TTL` | `3600` | 热榜缓存时间，单位秒 |
-| `MONGODB_URI` | `mongodb://localhost:27017/daily-hot-api` | MongoDB 连接字符串 |
+| `MONGODB_URI` | `mongodb://localhost:27017/daily-hot-api` | MongoDB 连接字符串。`NODE_ENV=production` 时必填，缺失会启动失败；Docker 镜像和 `ecosystem.config.cjs` 都设置了 `NODE_ENV=production` |
 
 Redis 使用延迟连接，连接失败时不会阻止进程启动。历史热点和每日简报依赖 MongoDB 持久化。
 
