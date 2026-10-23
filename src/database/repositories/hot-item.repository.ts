@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { HotItem, HotItemDocument } from '../schemas/hot-item.schema';
@@ -29,8 +29,10 @@ type HistoryStats = {
   sources: { _id: string; count: number; latestTimestamp: number }[];
 };
 
+const MIGRATION_DOC = 'docs/operations/hot-item-index-migration.md';
+
 @Injectable()
-export class HotItemRepository {
+export class HotItemRepository implements OnApplicationBootstrap {
   private readonly logger = new Logger(HotItemRepository.name);
   private statsCache?: { value: HistoryStats; expiresAt: number };
   private statsInFlight?: Promise<HistoryStats>;
@@ -39,6 +41,56 @@ export class HotItemRepository {
   constructor(
     @InjectModel(HotItem.name) private hotItemModel: Model<HotItemDocument>,
   ) {}
+
+  onApplicationBootstrap() {
+    // MongoDB 可以缺席且连接是懒加载的，校验不能阻塞启动。
+    void this.verifyUniqueIndex();
+  }
+
+  /**
+   * `saveHotItems` 依靠 `{source,url}` 唯一索引兜住并发 upsert。
+   * 旧库上已有同名的非唯一索引时，Mongoose 建唯一索引会冲突并静默失败，
+   * 因此这里显式读一次实际索引状态并告警，否则去重会悄无声息地失效。
+   */
+  private async verifyUniqueIndex(): Promise<void> {
+    const collection = this.hotItemModel.collection.collectionName;
+
+    try {
+      // 等 autoIndex 结束；与已有非唯一索引冲突时会在这里抛错。
+      await this.hotItemModel.init();
+    } catch (error) {
+      this.logger.warn(
+        `${collection} 索引创建失败：${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+
+    try {
+      const indexes = await this.hotItemModel.collection.indexes();
+      const ready = indexes.some(
+        (index) =>
+          this.isSourceUrlIndex(index.key as Record<string, unknown>) &&
+          index.unique === true,
+      );
+      if (ready) {
+        this.logger.log(`${collection} 的 {source,url} 唯一索引已就绪`);
+        return;
+      }
+
+      this.logger.warn(
+        `${collection} 的 {source,url} 不是唯一索引，并发抓取仍可能写入重复历史记录。` +
+          `请按 ${MIGRATION_DOC} 清理重复数据并重建 source_1_url_1 唯一索引。`,
+      );
+    } catch (error) {
+      this.logger.warn(
+        `无法读取 ${collection} 的索引状态：${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  private isSourceUrlIndex(key?: Record<string, unknown>): boolean {
+    const fields = Object.keys(key ?? {});
+    return fields.length === 2 && fields[0] === 'source' && fields[1] === 'url';
+  }
 
   // 检查是否存在重复数据
   async isDuplicate(source: string, url: string): Promise<boolean> {

@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { Model } from 'mongoose';
 import { HotItemRepository } from './hot-item.repository';
 import { HotItemDocument } from '../schemas/hot-item.schema';
@@ -65,6 +66,69 @@ describe('HotItemRepository.saveHotItems', () => {
     await expect(
       repository.saveHotItems([item('https://a.test', 'first')], 'demo'),
     ).resolves.toBe(1);
+  });
+});
+
+describe('HotItemRepository unique index check', () => {
+  const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+  const log = jest.spyOn(Logger.prototype, 'log').mockImplementation();
+
+  const bootstrap = async (
+    indexes: () => Promise<unknown>,
+    init = () => Promise.resolve(),
+  ) => {
+    warn.mockClear();
+    log.mockClear();
+    const repository = new HotItemRepository({
+      init,
+      collection: { collectionName: 'hotitems', indexes },
+    } as unknown as Model<HotItemDocument>);
+
+    repository.onApplicationBootstrap();
+    await new Promise((resolve) => setImmediate(resolve));
+  };
+
+  afterAll(() => {
+    warn.mockRestore();
+    log.mockRestore();
+  });
+
+  it('warns and points at the migration doc when the index is not unique', async () => {
+    await bootstrap(() =>
+      Promise.resolve([
+        { name: '_id_', key: { _id: 1 } },
+        { name: 'source_1_url_1', key: { source: 1, url: 1 } },
+      ]),
+    );
+
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('docs/operations/hot-item-index-migration.md'),
+    );
+  });
+
+  it('stays quiet when the unique index is in place', async () => {
+    await bootstrap(() =>
+      Promise.resolve([
+        { name: 'source_1_url_1', key: { source: 1, url: 1 }, unique: true },
+      ]),
+    );
+
+    expect(warn).not.toHaveBeenCalled();
+    expect(log).toHaveBeenCalledWith(expect.stringContaining('已就绪'));
+  });
+
+  it('reports index creation and read failures without breaking startup', async () => {
+    await bootstrap(
+      () => Promise.reject(new Error('buffering timed out')),
+      () => Promise.reject(new Error('Index options conflict')),
+    );
+
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('Index options conflict'),
+    );
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('buffering timed out'),
+    );
   });
 });
 
