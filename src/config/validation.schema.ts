@@ -33,13 +33,26 @@ export const configValidationSchema = z.object({
   BRIEF_LOOKBACK_HOURS: z.coerce.number().default(24),
   BRIEF_TOP_ITEMS_PER_SOURCE: z.coerce.number().default(10),
   // 上限与 ai-analysis.client.ts 的 PROMPT_BUDGET.maxTopics 对齐：
-  // 超出的主题进不了提示词，只会白付 Tavily 费用，所以启动时就拒绝。
+  // 超出的主题进不了提示词，只会白付搜索费用，所以启动时就拒绝。
   BRIEF_MAX_TOPICS: z.coerce.number().int().min(1).max(12).default(12),
   // 下限 1：之前靠 service 里的 `ttl > 0 ? ttl : 默认值` 兜底，改为启动时直接拒绝非法值
   BRIEF_STOCK_RANKING_CACHE_TTL: z.coerce.number().min(1).default(43200),
   BRIEF_GENERATING_TIMEOUT_MINUTES: z.coerce.number().min(1).default(30),
   BRIEF_SOURCE_CONCURRENCY: z.coerce.number().min(1).default(3),
   BRIEF_SEARCH_CONCURRENCY: z.coerce.number().min(1).default(3),
+  BRIEF_SEARCH_PROVIDERS: z
+    .string()
+    .default('tavily,deepseek')
+    .refine((value) => {
+      const names = value
+        .split(',')
+        .map((name) => name.trim())
+        .filter(Boolean);
+      return (
+        names.every((name) => name === 'tavily' || name === 'deepseek') &&
+        new Set(names).size === names.length
+      );
+    }, 'BRIEF_SEARCH_PROVIDERS must contain unique tavily/deepseek names'),
   OPENAI_API_KEY: z.string().default(''),
   OPENAI_API_BASE_URL: z.string().default(''),
   AI_MODEL: z.string().default('deepseek-v4-flash'),
@@ -48,6 +61,14 @@ export const configValidationSchema = z.object({
   TAVILY_API_KEY: z.string().default(''),
   TAVILY_MAX_RESULTS: z.coerce.number().default(5),
   TAVILY_TIMEOUT_MS: z.coerce.number().min(1000).default(10000),
+  DEEPSEEK_SEARCH_API_KEY: z.string().default(''),
+  DEEPSEEK_SEARCH_MAX_RESULTS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(50)
+    .default(5),
+  DEEPSEEK_SEARCH_TIMEOUT_MS: z.coerce.number().min(1000).default(10000),
 });
 
 export type ConfigType = z.infer<typeof configValidationSchema>;

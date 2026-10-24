@@ -86,6 +86,9 @@ export class AiAnalysisClient {
     }
 
     const model = this.getModel();
+    const isDeepseek = this.config.openaiBaseUrl
+      ? new URL(this.config.openaiBaseUrl).hostname === 'api.deepseek.com'
+      : false;
     const client = new OpenAI({
       apiKey,
       baseURL: this.config.openaiBaseUrl,
@@ -98,6 +101,11 @@ export class AiAnalysisClient {
       model,
       temperature: 0.2,
       response_format: { type: 'json_object' },
+      // DeepSeek 默认开启思考模式；实测复杂简报在 JSON 模式下仍会返回无效 JSON。
+      // 对结构化生成关闭思考，并留足输出空间。其他兼容端点不接收 DeepSeek 专属字段。
+      ...(isDeepseek
+        ? { thinking: { type: 'disabled' as const }, max_tokens: 16384 }
+        : {}),
       messages: [
         {
           role: 'system',
@@ -106,6 +114,7 @@ export class AiAnalysisClient {
             '你的任务不是复述新闻，而是识别重要事件、拆解产业链、关联A股公司，并给出风险与跟踪信号。',
             '必须谨慎处理A股公司和股票代码：只有在输入材料或搜索证据支持时才给出，无法确认就标记为待验证。',
             '只输出合法JSON，不要输出Markdown围栏。',
+            'JSON示例：{"summary":"今日结论","highlights":[],"topics":[{"title":"主题","event":"事件"}],"risks":[],"followUpSignals":[],"markdown":"# 每日简报"}。',
           ].join('\n'),
         },
         {

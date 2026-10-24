@@ -13,6 +13,7 @@ describe('DailyBriefConfigService', () => {
     BRIEF_GENERATING_TIMEOUT_MINUTES: 30,
     BRIEF_SOURCE_CONCURRENCY: 3,
     BRIEF_SEARCH_CONCURRENCY: 3,
+    BRIEF_SEARCH_PROVIDERS: 'tavily, deepseek',
     AI_MODEL: 'deepseek-v4-flash',
     AI_TIMEOUT_MS: 120000,
     AI_MAX_RETRIES: 0,
@@ -21,6 +22,9 @@ describe('DailyBriefConfigService', () => {
     TAVILY_API_KEY: '',
     TAVILY_MAX_RESULTS: 5,
     TAVILY_TIMEOUT_MS: 10000,
+    DEEPSEEK_SEARCH_API_KEY: '',
+    DEEPSEEK_SEARCH_MAX_RESULTS: 5,
+    DEEPSEEK_SEARCH_TIMEOUT_MS: 10000,
   };
 
   const getOrThrow = jest.fn((key: string) => {
@@ -42,10 +46,13 @@ describe('DailyBriefConfigService', () => {
     expect(config.generatingTimeoutMinutes).toBe(30);
     expect(config.sourceConcurrency).toBe(3);
     expect(config.searchConcurrency).toBe(3);
+    expect(config.searchProviders).toEqual(['tavily', 'deepseek']);
     expect(config.aiModel).toBe('deepseek-v4-flash');
     expect(config.aiTimeoutMs).toBe(120000);
     expect(config.tavilyMaxResults).toBe(5);
     expect(config.tavilyTimeoutMs).toBe(10000);
+    expect(config.deepseekSearchMaxResults).toBe(5);
+    expect(config.deepseekSearchTimeoutMs).toBe(10000);
   });
 
   it('trims and filters the source list', () => {
@@ -69,6 +76,13 @@ describe('DailyBriefConfigService', () => {
 
     values.TAVILY_API_KEY = 'tvly-test';
     expect(config.tavilyConfigured).toBe(true);
+  });
+
+  it('reports whether DeepSeek search is configured', () => {
+    expect(config.deepseekSearchConfigured).toBe(false);
+
+    values.DEEPSEEK_SEARCH_API_KEY = 'sk-test';
+    expect(config.deepseekSearchConfigured).toBe(true);
   });
 
   it('throws when a key is missing from configuration.ts', () => {

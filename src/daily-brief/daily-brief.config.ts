@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { SearchProviderName } from './interfaces/search-provider.interface';
 
 /**
  * 每日简报模块读取配置的统一入口。
@@ -67,6 +68,15 @@ export class DailyBriefConfigService {
     return this.configService.getOrThrow<number>('BRIEF_SEARCH_CONCURRENCY');
   }
 
+  /** 优先级从左到右；空列表表示关闭搜索增强。 */
+  get searchProviders(): SearchProviderName[] {
+    return this.configService
+      .getOrThrow<string>('BRIEF_SEARCH_PROVIDERS')
+      .split(',')
+      .map((name) => name.trim())
+      .filter(Boolean) as SearchProviderName[];
+  }
+
   get aiModel(): string {
     return this.configService.getOrThrow<string>('AI_MODEL');
   }
@@ -107,5 +117,21 @@ export class DailyBriefConfigService {
 
   get tavilyTimeoutMs(): number {
     return this.configService.getOrThrow<number>('TAVILY_TIMEOUT_MS');
+  }
+
+  get deepseekSearchApiKey(): string {
+    return this.configService.getOrThrow<string>('DEEPSEEK_SEARCH_API_KEY');
+  }
+
+  get deepseekSearchConfigured(): boolean {
+    return Boolean(this.deepseekSearchApiKey);
+  }
+
+  get deepseekSearchMaxResults(): number {
+    return this.configService.getOrThrow<number>('DEEPSEEK_SEARCH_MAX_RESULTS');
+  }
+
+  get deepseekSearchTimeoutMs(): number {
+    return this.configService.getOrThrow<number>('DEEPSEEK_SEARCH_TIMEOUT_MS');
   }
 }

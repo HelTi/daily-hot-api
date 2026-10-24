@@ -153,6 +153,7 @@ describe('DailyBriefService generateBrief', () => {
       maxTopics: 12,
       sourceConcurrency: 3,
       searchConcurrency: 3,
+      searchProviders: ['tavily', 'deepseek'],
       generatingTimeoutMinutes: 30,
     };
     findByDate.mockReset().mockResolvedValue(null);
@@ -175,7 +176,7 @@ describe('DailyBriefService generateBrief', () => {
       followUpSignals: [],
       markdown: '# 每日简报',
     });
-    search.mockReset().mockResolvedValue([]);
+    search.mockReset().mockResolvedValue({ provider: null, results: [] });
     cacheDelByPattern.mockReset().mockResolvedValue(undefined);
     cacheGet.mockReset().mockResolvedValue(null);
     cacheSet.mockReset().mockResolvedValue(undefined);
@@ -267,6 +268,37 @@ describe('DailyBriefService generateBrief', () => {
       'cls',
     ]);
     expect(search).toHaveBeenCalledTimes(2);
+  });
+
+  it('records the actual search provider and caches its results', async () => {
+    getHotList.mockResolvedValue({
+      success: true,
+      items: buildItems('fetched', 1),
+    });
+    search.mockResolvedValue({
+      provider: 'deepseek',
+      results: [{ title: '证据', url: 'https://example.com/evidence' }],
+    });
+
+    await service.generateBrief({ sources: ['cls'], force: true });
+
+    expect(markSuccess).toHaveBeenCalledWith(
+      expect.any(String),
+      'daily',
+      expect.any(String),
+      expect.objectContaining({
+        tavilyUsed: false,
+        searchProvidersUsed: ['deepseek'],
+        searchEvidence: [expect.objectContaining({ provider: 'deepseek' })],
+      }),
+    );
+    expect(cacheSet).toHaveBeenCalledWith(
+      expect.stringContaining('daily-brief:search:v2:'),
+      expect.objectContaining({
+        data: expect.objectContaining({ provider: 'deepseek' }),
+      }),
+      3600,
+    );
   });
 
   it('rejects a concurrent request while a fresh generation is in flight', async () => {

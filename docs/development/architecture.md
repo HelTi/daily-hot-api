@@ -20,7 +20,7 @@ Daily Hot API 是一个 NestJS 单体服务，按业务能力拆分模块。HTTP
   │
   └─ /api/briefs/* ──────> DailyBriefService
                              ├─ 热榜与历史数据
-                             ├─ TavilySearchClient
+                             ├─ BriefSearchService ──> TavilySearchClient / DeepseekSearchClient
                              ├─ AiAnalysisClient
                              └─ DailyBriefRepository ──> MongoDB
 ```
@@ -75,4 +75,4 @@ Schema 在 `src/database/schemas`，数据访问集中在 `src/database/reposito
 - Redis 采用延迟连接；不可用时部分缓存使用进程内存。
 - MongoDB 连接失败会记录警告，进程尽量继续运行，但历史、调度持久化和简报功能不可用。
 - 单个热点来源失败不会让来源注册表整体失败，统一响应可能包含空 `data` 和错误 `message`。
-- Tavily 或模型配置缺失会影响简报生成，不影响实时热榜接口。
+- 搜索平台按 `BRIEF_SEARCH_PROVIDERS` 顺序调用。某个平台未配置、请求失败或无有效结果时，尝试下一个；全部失败时简报仍可生成，但没有搜索证据。模型配置缺失会导致简报生成失败，不影响实时热榜接口。
