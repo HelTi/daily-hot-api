@@ -2,50 +2,22 @@ import { DailyBriefRepository } from './daily-brief.repository';
 import { HotItemRepository } from './hot-item.repository';
 
 /**
- * 部署目标是 MongoDB 4.0，这里守住聚合管道不引入 4.2+ 才提供的算子。
- * 之前出现过因为用了 `$set` / `$replaceAll` 导致线上报错的情况。
+ * 部署目标是 MongoDB 6.0（服务器与本机均为 6.0），这里守住聚合管道不引入
+ * 7.0 及以后才提供的算子。另外用白名单兜底：任何未登记的算子都会让测试失败，
+ * 逼迫改动者确认该算子在 6.0 可用——之前就出现过用了 `$set` / `$replaceAll`
+ * 导致线上报错的情况。
+ *
+ * 升级目标版本时，把下面的 FORBIDDEN 换成新目标版本之后才引入的算子，
+ * 并把新可用的算子按需加进各自白名单。
  */
 
-// 4.2 新增
-const STAGES_4_2 = ['$set', '$unset', '$replaceWith', '$merge'];
-const EXPRS_4_2 = [
-  '$replaceAll',
-  '$replaceOne',
-  '$regexFind',
-  '$regexFindAll',
-  '$regexMatch',
-  '$round',
-];
-// 4.4 新增
-const STAGES_4_4 = ['$unionWith', '$planCacheStats'];
-const EXPRS_4_4 = ['$accumulator', '$function', '$isNumber', '$binarySize'];
-// 5.0+ 新增
-const STAGES_5_PLUS = ['$setWindowFields', '$densify', '$fill', '$documents'];
-const EXPRS_5_PLUS = [
-  '$dateAdd',
-  '$dateSubtract',
-  '$dateDiff',
-  '$dateTrunc',
-  '$getField',
-  '$setField',
-  '$rand',
-  '$sortArray',
-  '$maxN',
-  '$minN',
-  '$firstN',
-  '$lastN',
-  '$median',
-  '$percentile',
-];
+// 7.0 新增
+const STAGES_7_0 = ['$listSearchIndexes', '$shardedDataDistribution'];
+const EXPRS_7_0 = ['$median', '$percentile'];
+// 8.0 新增
+const STAGES_8_0 = ['$querySettings', '$rankFusion', '$scoreFusion'];
 
-const FORBIDDEN = [
-  ...STAGES_4_2,
-  ...EXPRS_4_2,
-  ...STAGES_4_4,
-  ...EXPRS_4_4,
-  ...STAGES_5_PLUS,
-  ...EXPRS_5_PLUS,
-];
+const FORBIDDEN = [...STAGES_7_0, ...EXPRS_7_0, ...STAGES_8_0];
 
 /** 收集管道里出现的所有 `$` 开头的键名。 */
 const collectOperators = (node: unknown, found = new Set<string>()) => {
@@ -64,7 +36,7 @@ const collectOperators = (node: unknown, found = new Set<string>()) => {
   return found;
 };
 
-describe('daily brief aggregation pipelines stay MongoDB 4.0 compatible', () => {
+describe('daily brief aggregation pipelines stay MongoDB 6.0 compatible', () => {
   const capturedPipelines: unknown[][] = [];
   const aggregate = jest.fn((pipeline: unknown[]) => {
     capturedPipelines.push(pipeline);
@@ -101,8 +73,8 @@ describe('daily brief aggregation pipelines stay MongoDB 4.0 compatible', () => 
     expect(used).not.toContain(operator);
   });
 
-  it('only uses operators available in MongoDB 4.0', () => {
-    // 4.0 及更早版本即可用的算子白名单（含 $trim / $convert，二者正是 4.0 引入）
+  it('only uses operators available in MongoDB 6.0', () => {
+    // 6.0 及更早版本即可用的算子白名单。新增算子时请先确认它在 6.0 已可用。
     const allowed = new Set([
       '$match',
       '$project',
@@ -133,7 +105,7 @@ describe('daily brief aggregation pipelines stay MongoDB 4.0 compatible', () => 
       '$trim',
       '$convert',
       '$toUpper',
-      // 股票代码归一化与两轮分组（均为 3.2/3.4 引入，4.0 可用）
+      // 股票代码归一化与两轮分组
       '$let',
       '$filter',
       '$push',
@@ -153,8 +125,8 @@ describe('daily brief aggregation pipelines stay MongoDB 4.0 compatible', () => 
   });
 });
 
-describe('hot item aggregation pipelines stay MongoDB 4.0 compatible', () => {
-  it('only uses operators available in MongoDB 4.0', async () => {
+describe('hot item aggregation pipelines stay MongoDB 6.0 compatible', () => {
+  it('only uses operators available in MongoDB 6.0', async () => {
     const capturedPipelines: unknown[][] = [];
     const aggregate = jest.fn((pipeline: unknown[]) => {
       capturedPipelines.push(pipeline);

@@ -298,11 +298,11 @@ AI 给出的 `aShareMapping` 里，同一家公司在不同简报中可能写法
 
 公司名和代码取该股票**最近一次**出现时的有效值。
 
-股票排名聚合兼容 MongoDB 4.0：使用 `$addFields` 和 `$reduce`/`$split` 处理股票代码，不依赖 MongoDB 4.2/4.4 才提供的 `$set` 聚合阶段和 `$replaceAll` 表达式。
+股票排名聚合兼容 MongoDB 6.0（服务器与本机均为 6.0）：股票代码用 `$addFields` 和 `$reduce`/`$split` 处理。这套写法原本是为 4.0 兼容而来，目标版本提升到 6.0 后 `$set` 阶段和 `$replaceAll` 表达式已可使用，改写管道时可以简化，但需同步更新约束测试的白名单。
 
 简报列表接口（`GET /api/briefs`）的投影聚合同样兼容 4.0，用到的 `$$REMOVE`（3.6 引入）、`$ifNull`、`$size` 都在 4.0 可用范围内。
 
-这条约束由 `src/database/repositories/mongo40-compatibility.spec.ts` 守护：它把两条管道实际发出的算子全部抽出来，既检查没有出现 4.2/4.4/5.0 才有的算子，也用白名单确保不会悄悄引入未经确认的新算子。改动聚合管道后请保证该测试通过。
+这条约束由 `src/database/repositories/mongo-compatibility.spec.ts` 守护：它把管道实际发出的算子全部抽出来，既检查没有出现 7.0 及以后才有的算子，也用白名单确保不会悄悄引入未经确认的新算子。改动聚合管道后请保证该测试通过。
 
 查询参数：
 

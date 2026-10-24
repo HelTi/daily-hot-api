@@ -201,7 +201,7 @@ When adding a schema or repository:
 
 Daily brief collection has a unique index on `{ briefDate: 1, period: 1 }`.
 
-Aggregation pipelines must stay MongoDB 4.0 compatible. `src/database/repositories/mongo40-compatibility.spec.ts` extracts every operator the daily brief pipelines emit and fails on anything introduced after 4.0 (`$set`, `$replaceAll`, `$unionWith`, `$function`, `$getField`, …). Run it after touching any pipeline.
+Aggregation pipelines must stay MongoDB 6.0 compatible: the server and local development both run 6.0, and `docker-compose.yml` pins `mongo:6.0`. `src/database/repositories/mongo-compatibility.spec.ts` extracts every operator the pipelines emit, fails on anything introduced after 6.0, and also fails on any operator missing from its whitelist, so a new operator has to be confirmed as 6.0-available before it lands. Run it after touching any pipeline.
 
 ## Scheduler Notes
 
