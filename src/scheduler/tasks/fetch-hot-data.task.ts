@@ -160,8 +160,12 @@ export class FetchHotDataTask implements BeforeApplicationShutdown {
       const duration = Date.now() - startTime;
       result.duration = duration;
 
+      // 去重与新增的明细由 HotItemRepository 输出；这里只说抓到多少、入库多少。
+      const saveSummary = this.ignoredSaveSources.has(sourceName)
+        ? 'not saved (IGNORE_SAVE_SOURCES)'
+        : `${savedCount} new`;
       this.logger.log(
-        `✅ Source ${sourceName}: saved ${savedCount}/${hotListData.data.length} items in ${duration}ms`,
+        `✅ Source ${sourceName}: ${hotListData.data.length} fetched, ${saveSummary} in ${duration}ms`,
       );
 
       return result;
@@ -199,7 +203,7 @@ export class FetchHotDataTask implements BeforeApplicationShutdown {
     const totalItems = results.reduce((sum, r) => sum + r.totalCount, 0);
 
     this.logger.log(
-      `📊 Batch fetch completed in ${totalDuration}ms: ${succeeded} succeeded, ${failed} failed, ${totalSaved}/${totalItems} items saved`,
+      `📊 Batch fetch completed in ${totalDuration}ms: ${succeeded} succeeded, ${failed} failed, ${totalItems} fetched, ${totalSaved} new`,
     );
 
     // 记录失败的源
