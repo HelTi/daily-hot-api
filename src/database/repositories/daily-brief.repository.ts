@@ -249,7 +249,9 @@ export class DailyBriefRepository {
       },
       // 归一化股票代码：去掉 `.SH` 之类的后缀和 `SH`/`SZ`/`BJ` 前缀，
       // 让 600519 / SH600519 / 600519.SH 归到同一只股票。
-      // MongoDB 4.0 没有 $regexFind，这里只用字符串切分实现。
+      // 这套字符串切分写法源于早先的 4.0 兼容要求。目标版本已提升到 6.0，
+      // $regexFind / $replaceAll 可用，改写能简化这段，但要同步更新
+      // mongo-compatibility.spec.ts 的算子白名单。
       {
         $addFields: {
           code: {

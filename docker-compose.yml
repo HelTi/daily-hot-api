@@ -41,7 +41,7 @@ services:
       - app-network
 
   mongodb:
-    image: mongo:7.0
+    image: mongo:6.0
     container_name: daily-hot-mongodb
     ports:
       - "127.0.0.1:27017:27017"
