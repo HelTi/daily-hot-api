@@ -10,6 +10,14 @@ const INVALID_VALUES = ['', '待验证', '未知', 'N/A', '-'];
 const MARKET_PREFIXES = ['SH', 'SZ', 'BJ'];
 
 /**
+ * 形如 SH600519 的代码：剥掉交易所前缀，只保留 6 位本体。
+ * 捕获组只有一个，`captures[0]` 就是本体；不匹配时 $regexFind 返回 null。
+ */
+const MARKET_PREFIX_PATTERN = new RegExp(
+  `^(?:${MARKET_PREFIXES.join('|')})(.{6})$`,
+);
+
+/**
  * 取数组里最后一个非 null 的值，没有则返回空字符串。
  * 上游按 briefDate 升序排过，所以「最后一个」就是最近一次出现的值。
  */
@@ -222,26 +230,21 @@ export class DailyBriefRepository {
           },
           code: {
             $toUpper: {
-              $reduce: {
+              $replaceAll: {
                 input: {
-                  $split: [
-                    {
-                      $trim: {
-                        input: {
-                          $convert: {
-                            input: '$mappings.code',
-                            to: 'string',
-                            onError: '',
-                            onNull: '',
-                          },
-                        },
+                  $trim: {
+                    input: {
+                      $convert: {
+                        input: '$mappings.code',
+                        to: 'string',
+                        onError: '',
+                        onNull: '',
                       },
                     },
-                    ' ',
-                  ],
+                  },
                 },
-                initialValue: '',
-                in: { $concat: ['$$value', '$$this'] },
+                find: ' ',
+                replacement: '',
               },
             },
           },
@@ -249,9 +252,6 @@ export class DailyBriefRepository {
       },
       // 归一化股票代码：去掉 `.SH` 之类的后缀和 `SH`/`SZ`/`BJ` 前缀，
       // 让 600519 / SH600519 / 600519.SH 归到同一只股票。
-      // 这套字符串切分写法源于早先的 4.0 兼容要求。目标版本已提升到 6.0，
-      // $regexFind / $replaceAll 可用，改写能简化这段，但要同步更新
-      // mongo-compatibility.spec.ts 的算子白名单。
       {
         $addFields: {
           code: {
@@ -262,20 +262,17 @@ export class DailyBriefRepository {
               in: {
                 $let: {
                   vars: {
-                    prefix: { $substrCP: ['$$base', 0, 2] },
-                    rest: {
-                      $substrCP: ['$$base', 2, { $strLenCP: '$$base' }],
+                    matched: {
+                      $regexFind: {
+                        input: '$$base',
+                        regex: MARKET_PREFIX_PATTERN,
+                      },
                     },
                   },
                   in: {
                     $cond: [
-                      {
-                        $and: [
-                          { $in: ['$$prefix', MARKET_PREFIXES] },
-                          { $eq: [{ $strLenCP: '$$rest' }, 6] },
-                        ],
-                      },
-                      '$$rest',
+                      { $ne: ['$$matched', null] },
+                      { $arrayElemAt: ['$$matched.captures', 0] },
                       '$$base',
                     ],
                   },

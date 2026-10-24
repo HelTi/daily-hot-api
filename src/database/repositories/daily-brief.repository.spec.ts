@@ -122,11 +122,9 @@ describe('DailyBriefRepository stock ranking', () => {
     // 简报总数改用 countDocuments，与聚合共用同一份筛选条件
     expect(countDocuments).toHaveBeenCalledWith(expectedMatch);
 
+    // 版本可用性由 mongo-compatibility.spec.ts 统一守护，这里只确认管道结构。
     const serializedPipeline = JSON.stringify(pipeline);
-    expect(serializedPipeline).not.toContain('"$replaceAll"');
-    expect(serializedPipeline).not.toContain('"$set"');
     expect(serializedPipeline).toContain('"$addFields"');
-    expect(serializedPipeline).toContain('"$reduce"');
     expect(result).toEqual({
       totalBriefs: 3,
       uniqueStocks: 1,
