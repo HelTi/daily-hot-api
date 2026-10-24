@@ -8,7 +8,7 @@ This file gives Codex and other coding agents project-specific guidance for `dai
 
 Core stack:
 
-- Node.js >= 20
+- Node.js >= 24（CI、Dockerfile、.nvmrc 一致；npm >= 11，lockfile 由 npm 11 生成）
 - NestJS 11
 - TypeScript
 - MongoDB with Mongoose
