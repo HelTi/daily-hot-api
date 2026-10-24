@@ -1,3 +1,5 @@
+import type { SearchProviderName } from './search-provider.interface';
+
 export interface BriefInputItem {
   source: string;
   title: string;
@@ -18,6 +20,7 @@ export interface BriefSearchResult {
 export interface BriefSearchEvidence {
   topicTitle: string;
   query: string;
+  provider: SearchProviderName | null;
   results: BriefSearchResult[];
 }
 

@@ -49,6 +49,7 @@ describe('DailyBriefRepository generation fencing', () => {
       rawInputItems: [],
       searchEvidence: [],
       tavilyUsed: false,
+      searchProvidersUsed: [],
       sources: ['cls'],
       inputWindow: { start: new Date(), end: new Date(), lookbackHours: 24 },
     });

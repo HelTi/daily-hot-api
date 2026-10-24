@@ -87,6 +87,7 @@ interface DailyBriefView {
   markdown?: string;
   model?: string;
   tavilyUsed: boolean;
+  searchProvidersUsed?: string[];
   error?: string;
   createdAt?: string;
   updatedAt?: string;
@@ -127,7 +128,7 @@ interface BriefTopic {
 ┌────────────────────────────────────────────────────────────┐
 │ 顶部栏：每日简报 | 日期选择 | period 选择 | 刷新             │
 ├────────────────────────────────────────────────────────────┤
-│ 概览区：日期、更新时间、数据源、模型、Tavily 状态             │
+│ 概览区：日期、更新时间、数据源、模型、搜索平台             │
 ├────────────────────────────────────────────────────────────┤
 │ 核心结论 summary                                            │
 ├────────────────────────────────────────────────────────────┤
@@ -172,7 +173,7 @@ interface BriefTopic {
 | 数据窗口 | `inputWindow.start` / `inputWindow.end` |
 | 数据源 | `sources` |
 | 模型 | `model` |
-| 搜索增强 | `tavilyUsed` |
+| 搜索增强 | `searchProvidersUsed`；旧简报没有该字段时可用 `tavilyUsed` 判断 Tavily 是否提供证据 |
 
 推荐展示成一行紧凑信息：
 
@@ -416,7 +417,7 @@ BriefErrorState
 | 组件 | 字段 |
 | --- | --- |
 | `BriefToolbar` | `briefDate`, `period` |
-| `BriefMetaBar` | `sources`, `inputWindow`, `model`, `tavilyUsed`, `updatedAt` |
+| `BriefMetaBar` | `sources`, `inputWindow`, `model`, `searchProvidersUsed`, `tavilyUsed`, `updatedAt` |
 | `BriefSummary` | `analysis.summary` |
 | `BriefHighlights` | `analysis.highlights` |
 | `BriefTopicCard` | `analysis.topics[]` |

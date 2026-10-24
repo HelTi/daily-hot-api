@@ -26,7 +26,7 @@ features:
     linkText: 查询历史
   - icon: 🤖
     title: AI 每日简报
-    details: 使用 Tavily 补充搜索证据，通过 OpenAI 兼容接口生成结构化产业与 A 股关联分析。
+    details: 使用可配置的 Tavily 或 DeepSeek 搜索补充证据，通过 OpenAI 兼容接口生成结构化产业与 A 股关联分析。
     link: /guide/daily-brief
     linkText: 生成简报
   - icon: ⏱️

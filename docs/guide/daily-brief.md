@@ -1,6 +1,6 @@
 # 每日简报功能说明
 
-每日简报用于从配置的数据源中抓取热点内容，结合 Tavily 搜索增强和 OpenAI SDK 生成结构化产业简报。第一版重点面向财经、产业链和 A 股关联分析。
+每日简报用于从配置的数据源中抓取热点内容，结合可配置的网页搜索平台和 OpenAI SDK 生成结构化产业简报。重点面向财经、产业链和 A 股关联分析。
 
 ## 功能概览
 
@@ -12,7 +12,7 @@
   -> 刷新热点源数据并保存历史
   -> 读取最近 BRIEF_LOOKBACK_HOURS 的热点
   -> 按来源交错选择候选，去掉跨来源同标题主题
-  -> Tavily 搜索补充背景材料（有结果的查询缓存 1 小时）
+  -> 按配置顺序调用 Tavily / DeepSeek 搜索补充背景材料（有结果的查询缓存 1 小时）
   -> OpenAI SDK 生成结构化 JSON 和 Markdown
   -> 保存到 MongoDB
   -> API 返回前端可用的简报内容
@@ -20,7 +20,13 @@
 
 默认面向前端的响应不会返回 `rawInputItems` 和 `searchEvidence`。这两个字段仍会保存到数据库，用于后端排查和审计，需要显式传 `includeDebug=true` 才会返回。
 
-每个来源先取配置的前 N 条，再交错放入 AI 输入，避免一个来源按时间排序后占满候选。Tavily 搜索最多选择 `BRIEF_MAX_TOPICS` 个不同标题；送入模型的条目、描述和搜索摘要还会截断，原始输入仍保留在数据库调试字段中。
+每个来源先取配置的前 N 条，再交错放入 AI 输入，避免一个来源按时间排序后占满候选。搜索最多选择 `BRIEF_MAX_TOPICS` 个不同标题；送入模型的条目、描述和搜索摘要还会截断，原始输入仍保留在数据库调试字段中。
+
+`BRIEF_SEARCH_PROVIDERS` 决定平台顺序。例如 `tavily,deepseek` 会先查 Tavily；未配置密钥、请求失败或返回空结果时，再查 DeepSeek。每个主题一旦拿到有效结果就停止尝试，所有平台都失败时仍继续生成简报。成功结果会按搜索词与平台顺序缓存 1 小时；调换平台顺序不会复用旧顺序的缓存。调试响应的每条 `searchEvidence` 包含实际命中的 `provider`（均无结果时为 `null`）。
+
+DeepSeek 适配器调用[官方 Search API](https://api-docs.deepseek.com/zh-cn/guides/search/)，使用 `POST /v1/tools/search`、Bearer 鉴权和搜索摘要；不调用 Fetch 接口。
+
+当简报模型使用 DeepSeek 官方 API 地址时，结构化 JSON 生成会关闭思考模式、设置输出 token 上限，并在提示词中提供 JSON 示例，以降低模型返回无效 JSON 的概率。其他 OpenAI 兼容端点不发送 DeepSeek 专属参数。
 
 提示词预算定义在 `src/daily-brief/clients/ai-analysis.client.ts` 的 `PROMPT_BUDGET`：最多 60 条热点条目、12 条搜索证据。`BRIEF_MAX_TOPICS` 的校验上限与它对齐，配成更大的值会在启动时报配置错误，而不是跑完一次简报才发现主题被静默截断。`BRIEF_TOP_ITEMS_PER_SOURCE × 来源数` 超过 60 时（默认 7 个来源 × 10 条 = 70）多出的条目不会进入提示词，由于候选是按来源交错排列的，被丢掉的是每个来源排名最末的条目。调整这两个变量时需要一并考虑 `PROMPT_BUDGET`。
 
@@ -63,6 +69,7 @@ BRIEF_STOCK_RANKING_CACHE_TTL=43200
 BRIEF_GENERATING_TIMEOUT_MINUTES=30
 BRIEF_SOURCE_CONCURRENCY=3
 BRIEF_SEARCH_CONCURRENCY=3
+BRIEF_SEARCH_PROVIDERS=tavily,deepseek
 
 # OPENAI 配置
 OPENAI_API_KEY=skxxx
@@ -75,6 +82,11 @@ AI_MAX_RETRIES=2
 TAVILY_API_KEY=tvly-dev-xxx
 TAVILY_MAX_RESULTS=5
 TAVILY_TIMEOUT_MS=10000
+
+# DeepSeek Search API Key；可与 DeepSeek 模型 Key 相同，但需单独配置
+DEEPSEEK_SEARCH_API_KEY=
+DEEPSEEK_SEARCH_MAX_RESULTS=5
+DEEPSEEK_SEARCH_TIMEOUT_MS=10000
 ```
 
 字段说明：
@@ -87,11 +99,12 @@ TAVILY_TIMEOUT_MS=10000
 | `BRIEF_SOURCES` | 参与简报的数据源名称，逗号分隔，需在 `source_configs` 中启用 |
 | `BRIEF_LOOKBACK_HOURS` | 读取历史热点的回看窗口 |
 | `BRIEF_TOP_ITEMS_PER_SOURCE` | 每个源最多纳入多少条热点，默认只分析前 10 条 |
-| `BRIEF_MAX_TOPICS` | 最多对多少个候选主题做 Tavily 搜索增强，取值 1–12 |
+| `BRIEF_MAX_TOPICS` | 最多对多少个候选主题做搜索增强，取值 1–12 |
 | `BRIEF_STOCK_RANKING_CACHE_TTL` | 股票历史排名接口缓存时长（秒），默认 `43200`（12 小时） |
 | `BRIEF_GENERATING_TIMEOUT_MINUTES` | 简报卡在 `generating` 多久后视为失败并允许重新生成，默认 `30` 分钟 |
 | `BRIEF_SOURCE_CONCURRENCY` | 抓取热榜源时的最大并发数，默认 `3` |
-| `BRIEF_SEARCH_CONCURRENCY` | 调用 Tavily 搜索时的最大并发数，默认 `3` |
+| `BRIEF_SEARCH_CONCURRENCY` | 同时搜索的主题数，默认 `3`；每个主题内的平台依次尝试 |
+| `BRIEF_SEARCH_PROVIDERS` | 搜索平台优先级，默认 `tavily,deepseek`；可只选其一或留空关闭搜索增强 |
 | `OPENAI_API_KEY` | OpenAI SDK 使用的 API Key |
 | `OPENAI_API_BASE_URL` | 兼容 OpenAI 协议的 API Base URL |
 | `AI_MODEL` | 生成简报使用的模型 |
@@ -100,6 +113,9 @@ TAVILY_TIMEOUT_MS=10000
 | `TAVILY_API_KEY` | Tavily 搜索 API Key |
 | `TAVILY_MAX_RESULTS` | 每个搜索请求最多返回多少条结果 |
 | `TAVILY_TIMEOUT_MS` | 单次 Tavily 搜索超时（毫秒），默认 `10000` |
+| `DEEPSEEK_SEARCH_API_KEY` | DeepSeek Search API Key；与 `OPENAI_API_KEY` 独立配置，可填相同 Key |
+| `DEEPSEEK_SEARCH_MAX_RESULTS` | DeepSeek 每次搜索的返回条数，默认 `5`，取值 1–50 |
+| `DEEPSEEK_SEARCH_TIMEOUT_MS` | 单次 DeepSeek 搜索超时（毫秒），默认 `10000` |
 
 ## 数据结构
 
@@ -122,6 +138,7 @@ TAVILY_TIMEOUT_MS=10000
   searchEvidence: Record<string, unknown>[];
   model: string;
   tavilyUsed: boolean;
+  searchProvidersUsed: string[];
   error?: string;
   generationId?: string;
   generationHeartbeatAt?: Date;
@@ -154,7 +171,7 @@ http://localhost:6689
 
 | 接口 | 风险 |
 | --- | --- |
-| `POST /api/briefs/generate` | 触发 AI 与 Tavily 调用，直接产生费用 |
+| `POST /api/briefs/generate` | 触发 AI 与配置的搜索平台调用，可能产生费用 |
 | `DELETE /api/briefs/:date` | 删除指定日期的简报 |
 | `DELETE /api/briefs/history` | 按条件批量删除历史简报 |
 | `POST /api/briefs/scheduler/start`<br>`POST /api/briefs/scheduler/stop`<br>`POST /api/briefs/scheduler/reconfigure` | 改变定时任务运行状态 |
@@ -181,7 +198,9 @@ curl http://localhost:6689/api/briefs/config
   "maxTopics": 12,
   "stockRankingCacheTtl": 43200,
   "model": "deepseek-v4-flash",
-  "tavilyConfigured": true
+  "tavilyConfigured": true,
+  "deepseekSearchConfigured": true,
+  "searchProviders": ["tavily", "deepseek"]
 }
 ```
 
@@ -488,6 +507,7 @@ curl -X POST http://localhost:6689/api/briefs/scheduler/reconfigure
   "markdown": "# 每日热点简报...",
   "model": "deepseek-v4-flash",
   "tavilyUsed": true,
+  "searchProvidersUsed": ["tavily"],
   "createdAt": "2026-07-05T06:00:00.000Z",
   "updatedAt": "2026-07-05T06:01:00.000Z"
 }
@@ -559,7 +579,7 @@ process.stdin.on("end", () => {
 1. 修改 `.env` 后需要重启服务。
 2. `BRIEF_ENABLED=true` 只控制服务启动时是否自动注册简报定时任务。
 3. 手动启停调度只在当前进程内生效，服务重启后会重新读取 `.env`。
-4. `POST /api/briefs/generate` 会调用热点源、Tavily 和模型，耗时可能达到几十秒。
+4. `POST /api/briefs/generate` 会调用热点源、配置的搜索平台和模型，耗时可能达到几十秒。
 5. `includeDebug=true` 可能返回较大的响应体，不建议前端常规使用。
 6. A 股关联由模型基于热点和搜索证据生成，代码会提示模型不确定时标记为 `待验证`，但展示层仍建议保留风险提示。
 7. 删除接口会直接删除 MongoDB 中的简报记录，操作前建议先用分页查询接口确认范围。

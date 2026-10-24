@@ -515,6 +515,7 @@ export class DailyBriefRepository {
       searchEvidence: Record<string, unknown>[];
       model?: string;
       tavilyUsed: boolean;
+      searchProvidersUsed: string[];
       sources: string[];
       inputWindow: { start: Date; end: Date; lookbackHours: number };
     },

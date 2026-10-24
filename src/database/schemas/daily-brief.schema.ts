@@ -54,6 +54,9 @@ export class DailyBrief {
   @Prop({ default: false })
   tavilyUsed: boolean;
 
+  @Prop({ type: [String], default: [] })
+  searchProvidersUsed: string[];
+
   @Prop()
   error?: string;
 

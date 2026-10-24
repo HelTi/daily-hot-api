@@ -91,7 +91,7 @@ curl -X POST http://localhost:6689/api/briefs/scheduler/stop
 curl -X POST http://localhost:6689/api/briefs/scheduler/reconfigure
 ```
 
-简报调度会调用外部热榜、Tavily 和模型服务。开发环境建议保持 `BRIEF_ENABLED=false`，需要时使用手动生成接口。
+简报调度会调用外部热榜、配置的搜索平台和模型服务。开发环境建议保持 `BRIEF_ENABLED=false`，需要时使用手动生成接口。
 
 ## 状态与持久性
 

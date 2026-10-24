@@ -97,10 +97,11 @@ interface DailyBrief {
   searchEvidence: Record<string, unknown>[];
   model?: string;
   tavilyUsed: boolean;
+  searchProvidersUsed: string[];
   error?: string;
   createdAt?: Date;
   updatedAt?: Date;
 }
 ```
 
-`briefDate + period` 是唯一组合。默认前端响应会移除 `rawInputItems` 和 `searchEvidence`；仅在请求带有 `includeDebug=true` 时返回。
+`briefDate + period` 是唯一组合。`searchProvidersUsed` 记录实际提供搜索证据的平台；`tavilyUsed` 保留兼容，仅在 Tavily 提供证据时为 `true`。旧简报可能没有 `searchProvidersUsed`。默认前端响应会移除 `rawInputItems` 和 `searchEvidence`；仅在请求带有 `includeDebug=true` 时返回。

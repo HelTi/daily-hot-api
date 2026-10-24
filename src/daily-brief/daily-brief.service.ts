@@ -7,11 +7,10 @@ import {
 import { HotItemRepository } from '../database/repositories/hot-item.repository';
 import { FetchHotDataTask } from '../scheduler/tasks/fetch-hot-data.task';
 import { AiAnalysisClient, PROMPT_BUDGET } from './clients/ai-analysis.client';
-import { TavilySearchClient } from './clients/tavily-search.client';
+import { BriefSearchService } from './clients/brief-search.service';
 import {
   BriefInputItem,
   BriefSearchEvidence,
-  BriefSearchResult,
   GenerateBriefOptions,
 } from './interfaces/daily-brief.interface';
 import { StockRankingQueryDto } from './dto/stock-ranking-query.dto';
@@ -19,6 +18,7 @@ import { mapWithConcurrency } from './utils/concurrency';
 import { endOfBriefDate, formatBriefDate } from './utils/brief-date';
 import { DailyBriefConfigService } from './daily-brief.config';
 import { createHash, randomUUID } from 'crypto';
+import { SearchOutcome } from './interfaces/search-provider.interface';
 
 const STOCK_RANKING_CACHE_PREFIX = 'daily-brief:statistics:stocks:';
 
@@ -47,7 +47,7 @@ export class DailyBriefService {
     private readonly hotItemRepository: HotItemRepository,
     private readonly fetchHotDataTask: FetchHotDataTask,
     private readonly aiAnalysisClient: AiAnalysisClient,
-    private readonly tavilySearchClient: TavilySearchClient,
+    private readonly briefSearchService: BriefSearchService,
     private readonly cacheService: CacheService,
   ) {}
 
@@ -159,6 +159,14 @@ export class DailyBriefService {
     }
 
     const searchEvidence = await this.buildSearchEvidence(inputItems);
+    const searchProvidersUsed = [
+      ...new Set(
+        searchEvidence
+          .filter((item) => item.results.length > 0)
+          .map((item) => item.provider)
+          .filter((provider) => provider !== null),
+      ),
+    ];
     const analysis = await this.aiAnalysisClient.analyzeDailyBrief({
       briefDate,
       sources,
@@ -176,7 +184,8 @@ export class DailyBriefService {
         rawInputItems: inputItems as unknown as Record<string, unknown>[],
         searchEvidence: searchEvidence as unknown as Record<string, unknown>[],
         model: this.aiAnalysisClient.getModel(),
-        tavilyUsed: searchEvidence.some((item) => item.results.length > 0),
+        tavilyUsed: searchProvidersUsed.includes('tavily'),
+        searchProvidersUsed,
         sources,
         inputWindow,
       },
@@ -321,6 +330,8 @@ export class DailyBriefService {
       stockRankingCacheTtl: this.config.stockRankingCacheTtl,
       model: this.aiAnalysisClient.getModel(),
       tavilyConfigured: this.config.tavilyConfigured,
+      deepseekSearchConfigured: this.config.deepseekSearchConfigured,
+      searchProviders: this.config.searchProviders,
     };
   }
 
@@ -476,22 +487,25 @@ export class DailyBriefService {
       this.config.searchConcurrency,
       async (item) => {
         const query = `${item.title} ${(item.desc || '').slice(0, 120)} 产业链 A股 影响`;
-        const key = `daily-brief:search:${createHash('sha256').update(query).digest('hex')}`;
+        const key = `daily-brief:search:v2:${createHash('sha256')
+          .update(`${this.config.searchProviders.join(',')}:${query}`)
+          .digest('hex')}`;
         const cached =
-          await this.cacheService.get<CacheData<BriefSearchResult[]>>(key);
-        const results =
-          cached?.data ?? (await this.tavilySearchClient.search(query));
-        if (!cached && results.length > 0) {
+          await this.cacheService.get<CacheData<SearchOutcome>>(key);
+        const outcome =
+          cached?.data ?? (await this.briefSearchService.search(query));
+        if (!cached && outcome.results.length > 0) {
           await this.cacheService.set(
             key,
-            { data: results, updateTime: new Date().toISOString() },
+            { data: outcome, updateTime: new Date().toISOString() },
             3600,
           );
         }
         return {
           topicTitle: item.title,
           query,
-          results,
+          provider: outcome.provider,
+          results: outcome.results,
         };
       },
     );

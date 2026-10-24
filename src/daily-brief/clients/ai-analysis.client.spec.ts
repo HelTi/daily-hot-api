@@ -1,6 +1,19 @@
 import { AiAnalysisClient } from './ai-analysis.client';
 import { BriefAnalysis } from '../interfaces/daily-brief.interface';
 
+const mockCreate = jest.fn();
+jest.mock('openai', () => ({
+  __esModule: true,
+  default: jest.fn().mockImplementation(() => ({
+    chat: {
+      completions: {
+        create: (...args: unknown[]): Promise<unknown> =>
+          mockCreate(...args) as Promise<unknown>,
+      },
+    },
+  })),
+}));
+
 interface ParseAnalysisInternals {
   parseAnalysis(content: string): BriefAnalysis;
 }
@@ -47,5 +60,53 @@ describe('AiAnalysisClient parseAnalysis', () => {
 
   it('rejects malformed JSON', () => {
     expect(() => parse('not json')).toThrow(/invalid JSON/);
+  });
+});
+
+describe('AiAnalysisClient DeepSeek JSON request', () => {
+  beforeEach(() => {
+    mockCreate.mockReset().mockResolvedValue({
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({
+              summary: '结论',
+              topics: [{ title: '主题' }],
+            }),
+          },
+        },
+      ],
+    });
+  });
+
+  it.each([
+    ['https://api.deepseek.com', true],
+    ['https://example.test/v1', false],
+  ])('sets DeepSeek-only JSON options for %s', async (baseUrl, isDeepseek) => {
+    const client = new AiAnalysisClient({
+      openaiApiKey: 'sk-test',
+      openaiBaseUrl: baseUrl,
+      aiTimeoutMs: 1000,
+      aiMaxRetries: 0,
+      aiModel: 'test-model',
+    } as never);
+
+    await client.analyzeDailyBrief({
+      briefDate: '2026-10-24',
+      sources: ['cls'],
+      items: [],
+      searchEvidence: [],
+    });
+
+    const request = mockCreate.mock.calls[0][0] as {
+      thinking?: { type: string };
+      max_tokens?: number;
+      response_format: { type: string };
+    };
+    expect(request.response_format).toEqual({ type: 'json_object' });
+    expect(request.thinking).toEqual(
+      isDeepseek ? { type: 'disabled' } : undefined,
+    );
+    expect(request.max_tokens).toBe(isDeepseek ? 16384 : undefined);
   });
 });

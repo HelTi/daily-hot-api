@@ -47,6 +47,7 @@ Redis 使用延迟连接，连接失败时不会阻止进程启动。历史热�
 | `BRIEF_GENERATING_TIMEOUT_MINUTES` | `30` | 生成尝试的过期阈值，单位分钟 |
 | `BRIEF_SOURCE_CONCURRENCY` | `3` | 简报刷新源的最大并发数 |
 | `BRIEF_SEARCH_CONCURRENCY` | `3` | 搜索增强的最大并发数 |
+| `BRIEF_SEARCH_PROVIDERS` | `tavily,deepseek` | 搜索平台优先级，逗号分隔；可选 `tavily`、`deepseek`，留空关闭搜索增强 |
 
 ## AI 与搜索服务
 
@@ -60,6 +61,9 @@ Redis 使用延迟连接，连接失败时不会阻止进程启动。历史热�
 | `AI_TIMEOUT_MS` | `120000` | 单次 AI 请求超时，单位毫秒 |
 | `AI_MAX_RETRIES` | `2` | AI 客户端重试次数 |
 | `TAVILY_TIMEOUT_MS` | `10000` | 单次 Tavily 请求超时，单位毫秒 |
+| `DEEPSEEK_SEARCH_API_KEY` | 空 | DeepSeek Search API Key；可使用与 DeepSeek 模型相同的 Key，需单独配置 |
+| `DEEPSEEK_SEARCH_MAX_RESULTS` | `5` | 单次 DeepSeek 搜索结果数，取值 1–50 |
+| `DEEPSEEK_SEARCH_TIMEOUT_MS` | `10000` | 单次 DeepSeek 搜索超时，单位毫秒 |
 
 ::: danger 密钥安全
 不要提交真实 API Key，也不要在日志、Issue、构建产物或前端代码中暴露密钥。GitHub Pages 只托管静态文档，不应注入任何服务端密钥。
