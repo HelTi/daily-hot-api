@@ -138,9 +138,6 @@ export class HotItemRepository implements OnApplicationBootstrap {
     if (items.length === 0) return 0;
 
     const originalCount = items.length;
-    this.logger.debug(
-      `Processing ${originalCount} items for source: ${source}`,
-    );
 
     // 1. 验证和清理数据
     const validItems = items
@@ -182,14 +179,22 @@ export class HotItemRepository implements OnApplicationBootstrap {
           },
         },
         upsert: true,
+        // 必须逐条关闭：bulkWrite 的全局 timestamps 选项不生效，Mongoose 会额外
+        // 注入 `$set: { updatedAt }`，与上面的 $setOnInsert 撞成 MongoDB 错误 40
+        // （ConflictingUpdateOperators），整批写入全部失败。
+        timestamps: false,
       },
     }));
 
     try {
       const result = await this.hotItemModel.bulkWrite(operations, {
         ordered: false,
-        timestamps: false,
       });
+      // 三个数都要报：抓取条数、批次内去重后的条数、真正新插入的条数。
+      // 只报「新增/抓取」会让重复抓取看起来像写入失败。
+      this.logger.log(
+        `${source}: ${originalCount} fetched → ${uniqueItems.length} unique → ${result.upsertedCount} new`,
+      );
       if (result.upsertedCount > 0) this.invalidateStats();
       return result.upsertedCount;
     } catch (error: unknown) {

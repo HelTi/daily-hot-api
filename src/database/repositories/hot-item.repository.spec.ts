@@ -34,7 +34,8 @@ describe('HotItemRepository.saveHotItems', () => {
     expect(count).toBe(2);
     expect(bulkWrite).toHaveBeenCalledTimes(1);
     const [operations, options] = bulkWrite.mock.calls[0];
-    expect(options).toEqual({ ordered: false, timestamps: false });
+    // timestamps 只能逐条关闭，见下一条用例
+    expect(options).toEqual({ ordered: false });
     expect(operations).toHaveLength(2);
     expect(operations[0].updateOne).toMatchObject({
       filter: { source: 'demo', url: 'https://a.test' },
@@ -42,6 +43,17 @@ describe('HotItemRepository.saveHotItems', () => {
       upsert: true,
     });
     expect(operations[0].updateOne.update.$set).toBeUndefined();
+  });
+
+  it('disables timestamps per operation so Mongoose adds no conflicting $set', async () => {
+    // bulkWrite 的全局 timestamps 选项不生效；漏掉逐条设置会让 Mongoose 注入
+    // `$set: { updatedAt }`，与 $setOnInsert 撞成 MongoDB 错误 40，整批写入失败。
+    bulkWrite.mockResolvedValue({ upsertedCount: 1 });
+
+    await repository.saveHotItems([item('https://a.test', 'first')], 'demo');
+
+    const [operations] = bulkWrite.mock.calls[0];
+    expect(operations[0].updateOne.timestamps).toBe(false);
   });
 
   it('counts only new documents', async () => {
