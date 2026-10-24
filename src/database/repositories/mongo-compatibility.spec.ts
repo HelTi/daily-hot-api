@@ -4,8 +4,8 @@ import { HotItemRepository } from './hot-item.repository';
 /**
  * 部署目标是 MongoDB 6.0（服务器与本机均为 6.0），这里守住聚合管道不引入
  * 7.0 及以后才提供的算子。另外用白名单兜底：任何未登记的算子都会让测试失败，
- * 逼迫改动者确认该算子在 6.0 可用——之前就出现过用了 `$set` / `$replaceAll`
- * 导致线上报错的情况。
+ * 逼迫改动者确认该算子在 6.0 可用——历史上就出现过用了当时还不可用的
+ * `$set` / `$replaceAll` 导致线上报错的情况。
  *
  * 升级目标版本时，把下面的 FORBIDDEN 换成新目标版本之后才引入的算子，
  * 并把新可用的算子按需加进各自白名单。
@@ -104,16 +104,16 @@ describe('daily brief aggregation pipelines stay MongoDB 6.0 compatible', () => 
       '$split',
       '$trim',
       '$convert',
+      // 6.0 可用（4.2 引入），用于股票代码归一化
+      '$replaceAll',
+      '$regexFind',
       '$toUpper',
       // 股票代码归一化与两轮分组
       '$let',
       '$filter',
       '$push',
-      '$and',
       '$eq',
       '$arrayElemAt',
-      '$substrCP',
-      '$strLenCP',
       '$setUnion',
     ]);
 
