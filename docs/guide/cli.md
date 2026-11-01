@@ -255,18 +255,46 @@ CLI 管理的是自己启动的进程（通过状态目录里的 PID），不会
 
 ## 发布到 npm（维护者）
 
-当前已经以 `0.1.1` 发布。后续发布新版本时确认：
+当前已经以 `0.1.1` 发布。发布新版本前先更新版本号，并合并到 `main`：
 
-1. 更新版本号（`npm version patch|minor|major`）。
-2. 本地验证：先 `npm run build`，再 `npm run pack:check`（`pack:check` 只打包现有 `dist`，不会自动构建），确认 tarball 只包含 `bin/`、`dist/`、`views/`、`.env.example` 和自动附带的 `package.json` / `README.md` / `LICENSE`，不包含 `.env`、`docs/.vitepress` 缓存或测试文件。
-3. 登录并发布：
+```bash
+npm version patch|minor|major --no-git-tag-version
+```
+
+### 推荐：Trusted Publishing（OIDC，不需要 token）
+
+仓库提供 `.github/workflows/publish.yml`，通过 GitHub Actions OIDC 发布，npm 会自动生成 provenance，不需要保存 `NPM_TOKEN`。
+
+在包的设置页 [Trusted Publisher](https://www.npmjs.com/package/@ttkit/daily-hot-api/access) 按下面填写：
+
+| 字段 | 值 |
+| --- | --- |
+| Publisher | GitHub Actions |
+| Label | 可留空，或填 `release` |
+| Organization or user | `HelTi` |
+| Repository | `daily-hot-api` |
+| Workflow filename | `publish.yml` |
+| Environment name | 留空 |
+| Allowed actions | 勾选 **`npm publish`**（`npm stage publish` 默认允许） |
+
+保存后，发布新版本有两种方式：
+
+1. 在 GitHub 创建 Release（发布 tag，例如 `v0.1.2`），触发 `Publish to npm` workflow；
+2. 在 GitHub Actions 页面手动运行 `Publish to npm`（`workflow_dispatch`）。
+
+workflow 依次执行 `npm ci` → `npm run build` → `npm test` → `npm publish --access public`。发布前请确认 `main` 上 `package.json` 的版本已更新，且与 Release tag 对应。
+
+### 备选：本地 token 发布
+
+1. 本地验证：先 `npm run build`，再 `npm run pack:check`（`pack:check` 只打包现有 `dist`，不会自动构建），确认 tarball 只包含 `bin/`、`dist/`、`views/`、`.env.example` 和自动附带的 `package.json` / `README.md` / `LICENSE`，不包含 `.env`、`docs/.vitepress` 缓存或测试文件。
+2. 登录并发布：
 
 ```bash
 npm login
 npm publish --access public
 ```
 
-`prepublishOnly` 会自动执行 `npm run build`；`publishConfig.access` 为 `public`，`publishConfig.registry` 指向 `https://registry.npmjs.org/`，因此即使本机 registry 配置为镜像（例如 npmmirror），`npm publish` 也会发布到 npmjs。
+`prepublishOnly` 会自动执行 `npm run build`；`publishConfig.access` 为 `public`，`publishConfig.registry` 指向 `https://registry.npmjs.org/`，因此即使本机 registry 配置为镜像（例如 npmmirror），`npm publish` 也会发布到 npmjs。配置 Trusted Publisher 后仍然可以用 token 手动发布。
 
 ::: tip 为什么用 @ttkit scope
 非 scoped 的 `daily-hot-api` 与 npm 上已有的 `dailyhotapi` 太相似，npm 不允许注册；因此使用 `@ttkit/daily-hot-api`，而终端命令保持 `daily-hot-api`。如果 npm 将新版本放入 staged 队列，需要维护者在 npmjs.com 的 **Staged Packages** 页面用 2FA 审批后版本才会真正可安装。
