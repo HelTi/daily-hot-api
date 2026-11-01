@@ -19,6 +19,8 @@ Core stack:
 ## Important Directories
 
 ```text
+bin/
+  daily-hot-api.js        npm bin shim (requires dist/cli/index.js)
 src/
   app.module.ts
   config/                 App configuration and validation
@@ -28,6 +30,7 @@ src/
   history/                Historical hot item query APIs
   scheduler/              Scheduled hot data fetch tasks
   daily-brief/            AI daily brief module
+  cli/                    npm CLI: start/stop/status/restart/logs
   http/                   Shared HTTP client for source fetching
   token/                  Token/signature helpers for selected sources
 
@@ -56,6 +59,46 @@ Notes:
 ```bash
 PORT=6699 BRIEF_ENABLED=false npm run start:prod
 ```
+
+CLI（先 `npm run build`，再用 `node bin/daily-hot-api.js` 等价于全局命令）：
+
+```bash
+node bin/daily-hot-api.js --help
+node bin/daily-hot-api.js status
+DAILY_HOT_API_HOME=/tmp/dha-home node bin/daily-hot-api.js start -d --port 6699 --config .env
+DAILY_HOT_API_HOME=/tmp/dha-home node bin/daily-hot-api.js stop
+```
+
+## CLI（npm 包）
+
+`package.json` 已配置为可发布的 CLI 包：npm 包名 `@ttkit/daily-hot-api`（scoped），bin 命令名 `daily-hot-api`，`files` 白名单（`bin/ dist/ views/ .env.example`）、`main: dist/main.js`、`publishConfig.access: public`、`publishConfig.registry: https://registry.npmjs.org/`、`prepublishOnly` 构建，并移除了 `private`。当前已发布 `0.1.1`。非 scoped 的 `daily-hot-api` 与 npm 上已有的 `dailyhotapi` 太相似而无法注册，不要改回；npm 若把首版/新版本放入 staged 队列，需要维护者在 npmjs.com 的 Staged Packages 页面用 2FA 审批。CLI 文档在 `docs/guide/cli.md`。
+
+代码结构：
+
+```text
+bin/daily-hot-api.js       npm bin shim，require dist/cli/index.js 并调用 main()
+src/cli/index.ts           命令分发 + main() 错误处理
+src/cli/args.ts            参数解析、命令/选项兼容性校验
+src/cli/help.ts            全局与各命令帮助文本
+src/cli/paths.ts           包根目录、bin 路径、状态目录、配置文件解析
+src/cli/env.ts             .env 合并（不覆盖已有环境变量）、端口解析
+src/cli/run-state.ts       运行状态文件、PID/命令行校验、端口探测
+src/cli/health.ts          /health 就绪探测
+src/cli/log-file.ts        日志尾部读取与增量读取
+src/cli/commands/          start / stop / status / restart / logs
+```
+
+行为约定：
+
+- `daily-hot-api`（无参数）等价 `start`，在前台就地复用 `bootstrap()` 启动 Nest 应用；`start -d` 通过 `bin/daily-hot-api.js` 派生 detached 子进程，父进程轮询状态文件与 `/health`（最多 60 秒）后退出。
+- `stop/status/restart` 依赖状态目录（默认 `~/.daily-hot-api`，`DAILY_HOT_API_HOME` / `--home` 可覆盖）中的 `daily-hot-api.json`；`logs` 只读 `<home>/logs/daily-hot-api.log`，不依赖状态文件。
+- PID 通过 `ps` 校验是否仍是 daily-hot-api 进程，避免 PID 复用误杀；PS 不可用（Windows、受限沙箱）时退化为「存活即信任」。PID 存活但确认不属于本服务时，`stop` 会保留状态文件并提示用 `--force`，`status` 也保留状态文件；只有进程已退出或状态文件损坏时才自动清理。
+- 后台日志写入 `<home>/logs/daily-hot-api.log`；前台模式标准输出到终端，不写日志文件。
+- 配置优先级：`--config` > `DAILY_HOT_API_ENV_FILE` > `<cwd>/.env` > `<home>/.env`；端口优先级：`--port` > `PORT` > 6689。
+- 不要使用 `--env-file`：Node.js 24 会抢先解析该参数（即使位于脚本路径之后），文件不存在时直接以退出码 9 失败。帮助和文档统一使用 `--config`，args 解析器保留 `--env-file` 作为兼容别名。
+- `src/main.ts` 导出 `bootstrap()` 与 `resolveViewsDir()`，仅在 `require.main === module` 时自动启动，供 CLI 复用；模板目录优先从包根目录 `views/` 解析，兼容全局安装后在任意 cwd 运行，`cwd/views` 作为兜底。
+- 退出码：`0` 成功、`1` 运行错误、`2` 用法错误、`3` status 未运行。
+- 发布前：`npm run build`、`npm run pack:check`，确认 tarball 不含 `.env`、docs 缓存或测试文件；`prepublishOnly` 会自动构建。CLI 测试在 `src/cli/*.spec.ts`。
 
 ## Configuration
 
@@ -252,6 +295,25 @@ curl http://localhost:6699/api/briefs/config
 curl http://localhost:6699/api/briefs/latest
 ```
 
+For CLI / npm packaging changes:
+
+```bash
+npm run build
+npx eslint "src/**/*.ts"
+npm test
+node bin/daily-hot-api.js --help
+npm run pack:check
+```
+
+For manual CLI lifecycle checks, use an isolated state directory and port so the developer's own instance is not touched:
+
+```bash
+DAILY_HOT_API_HOME=/tmp/dha-home node bin/daily-hot-api.js start -d --port 6791 --config .env
+curl http://127.0.0.1:6791/health
+DAILY_HOT_API_HOME=/tmp/dha-home node bin/daily-hot-api.js status
+DAILY_HOT_API_HOME=/tmp/dha-home node bin/daily-hot-api.js stop
+```
+
 For destructive daily brief cleanup routes, prefer safe no-op checks first:
 
 ```bash
@@ -269,3 +331,5 @@ Expected result should include `deletedCount: 0`.
 - Update `.env.example` when adding or changing environment variables.
 - Avoid returning large debug fields to frontend-facing APIs by default.
 - Preserve user changes in a dirty worktree; do not revert unrelated edits.
+- Keep npm publish metadata in sync when touching `package.json`: `bin`, `files`, `main`, `version`, and `publishConfig`. `files` must keep `views/` for the CLI to render `/` when installed globally.
+- When changing CLI behavior or options, update `docs/guide/cli.md`, the help text in `src/cli/help.ts`, and the CLI section in this file together.

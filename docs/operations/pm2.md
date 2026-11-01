@@ -2,6 +2,10 @@
 
 PM2 适合在已有 Node.js、MongoDB 和 Redis 的服务器上运行单实例服务。
 
+::: tip 只想本机快速启停？
+可以使用 npm CLI 的 `daily-hot-api` 命令前台/后台启动服务，并用 `stop`、`status`、`logs` 管理，见[命令行工具](/guide/cli)。CLI 不接管 PM2 进程，同一端口不要同时用两种方式启动。
+:::
+
 ## 准备
 
 ```bash

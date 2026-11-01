@@ -24,6 +24,7 @@ export default defineConfig({
           items: [
             { text: '快速开始', link: '/guide/getting-started' },
             { text: '环境配置', link: '/guide/configuration' },
+            { text: '命令行工具', link: '/guide/cli' },
             { text: '获取热榜', link: '/guide/hot-lists' },
           ],
         },

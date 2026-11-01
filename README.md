@@ -14,6 +14,7 @@
 - 🔍 支持全文搜索和高级查询
 - 🎯 基于 URL 的数据去重机制
 - 🤖 AI分析数据生成深度简报
+- 🖥️ 支持 npm 全局安装的 CLI，一条命令启动/停止热点服务
 
 ## 支持的站点
 
@@ -93,7 +94,7 @@
 - **语言**: TypeScript
 
 ## 本地运行
-安装 node 版本 >= 20，推荐安装 redis 和 MongoDB，redis 用于查询缓存，如果没有redis 将使用内存缓存，MongoDB用于保存历史数据，可选。
+安装 node 版本 >= 24，推荐安装 redis 和 MongoDB，redis 用于查询缓存，如果没有redis 将使用内存缓存，MongoDB用于保存历史数据，可选。
 ```bash
 # clone项目
 git clone https://github.com/HelTi/daily-hot-api.git
@@ -117,6 +118,33 @@ $ npm run start:dev
 # 生产模式
 $ npm run start:prod
 ```
+
+## 命令行工具（CLI）
+
+已发布到 npm：**包名 `@ttkit/daily-hot-api`**，安装后终端命令仍为 **`daily-hot-api`**。全局安装后可以在任意目录启动/停止服务：
+
+```bash
+npm install -g @ttkit/daily-hot-api
+
+daily-hot-api                    # 前台启动，读取当前目录的 .env
+daily-hot-api -p 6699            # 指定端口前台启动
+daily-hot-api start -d           # 后台启动
+daily-hot-api status             # 查看状态
+daily-hot-api logs -f            # 跟踪后台日志
+daily-hot-api stop               # 停止服务
+```
+
+从源码调试时，也可以构建后直接使用等价入口：
+
+```bash
+npm run build
+node bin/daily-hot-api.js --help
+node bin/daily-hot-api.js start -d --config .env
+```
+
+不想全局安装时可以直接用 npx：`npx @ttkit/daily-hot-api --help`。
+
+CLI 会把运行状态和后台日志写入 `~/.daily-hot-api`（可用 `DAILY_HOT_API_HOME` 或 `--home` 修改），端口默认取 `.env` 的 `PORT`，否则 6689。完整命令、退出码和故障排查见[命令行工具文档](https://helti.github.io/daily-hot-api/guide/cli)。
 
 ## API 接口
 
