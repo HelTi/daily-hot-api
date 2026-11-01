@@ -69,6 +69,17 @@ Redis 使用延迟连接，连接失败时不会阻止进程启动。历史热�
 不要提交真实 API Key，也不要在日志、Issue、构建产物或前端代码中暴露密钥。GitHub Pages 只托管静态文档，不应注入任何服务端密钥。
 :::
 
+## CLI 专用变量
+
+以下变量只由 `daily-hot-api` 命令行工具读取，不参与应用配置校验：
+
+| 变量 | 示例值 | 说明 |
+| --- | --- | --- |
+| `DAILY_HOT_API_HOME` | `~/.daily-hot-api` | CLI 状态目录，保存运行状态和后台日志 |
+| `DAILY_HOT_API_ENV_FILE` | `/etc/daily-hot-api/prod.env` | 显式指定 CLI 加载的 `.env` 文件，等价于 `--config` |
+
+`PORT` 同时被 CLI 和服务读取：CLI 用它在启动前检查端口占用，服务用它监听。CLI 默认读取当前工作目录的 `.env`，因此从哪个目录执行 `daily-hot-api` 会影响加载的配置。详见[命令行工具](/guide/cli)。
+
 ## 修改配置
 
 默认值和校验规则只定义在 `src/config/validation.schema.ts`。`configuration.ts` 从这张 Schema 读取运行时配置。新增环境变量时同步修改：

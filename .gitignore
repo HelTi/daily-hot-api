@@ -2,6 +2,9 @@
 /dist
 /node_modules
 /build
+
+# npm pack artifacts
+*.tgz
 docs/.vitepress/dist
 docs/.vitepress/cache
 # 备份数据文件夹

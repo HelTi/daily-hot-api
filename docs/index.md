@@ -44,6 +44,11 @@ features:
     details: 支持本地、PM2 与 Docker Compose，Redis 和 MongoDB 可随服务一起运行。
     link: /operations/docker
     linkText: 部署服务
+  - icon: 🖥️
+    title: 命令行工具
+    details: 已发布 npm 包 @ttkit/daily-hot-api，全局安装后可用 daily-hot-api 命令在前台或后台启动服务，并用 stop/status/logs 管理进程。
+    link: /guide/cli
+    linkText: 使用 CLI
 ---
 
 ## 从这里开始

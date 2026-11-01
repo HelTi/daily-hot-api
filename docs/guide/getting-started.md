@@ -45,6 +45,20 @@ npm run dev
 
 服务默认监听 `http://localhost:6689`。如果 `.env` 中将 `PORT` 设置为其他值，请同步替换后续示例的端口。
 
+::: tip 用 npm CLI 启动
+包已发布到 npm，可以全局安装 `@ttkit/daily-hot-api`（命令为 `daily-hot-api`），从任意目录启动和停止服务：
+
+```bash
+npm install -g @ttkit/daily-hot-api
+daily-hot-api start -d      # 后台启动
+daily-hot-api status        # 查看状态
+daily-hot-api logs -f       # 跟踪日志
+daily-hot-api stop          # 停止服务
+```
+
+CLI 默认读取当前工作目录的 `.env` 并支持 `--config` 指定配置文件，详见[命令行工具](/guide/cli)。
+:::
+
 ## 验证
 
 检查服务状态：

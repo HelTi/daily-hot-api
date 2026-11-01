@@ -1,10 +1,45 @@
 {
-  "name": "daily-hot-api",
-  "version": "0.0.1",
-  "description": "一个基于 NestJS 的每日热榜聚合 API 服务，支持多个平台的热榜数据获取，支持本地部署，pm2部署、docker部署。",
+  "name": "@ttkit/daily-hot-api",
+  "version": "0.1.1",
+  "description": "一个基于 NestJS 的每日热榜聚合 API 服务，支持多个平台的热榜数据获取，支持本地部署、pm2部署、docker部署，并提供可全局安装的 CLI 启动/停止热点服务。",
   "author": "Helti",
-  "private": true,
-  "license": "UNLICENSED",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/HelTi/daily-hot-api.git"
+  },
+  "homepage": "https://helti.github.io/daily-hot-api/",
+  "bugs": {
+    "url": "https://github.com/HelTi/daily-hot-api/issues"
+  },
+  "keywords": [
+    "daily-hot",
+    "hot-list",
+    "hot-search",
+    "nestjs",
+    "api",
+    "cli",
+    "aggregator",
+    "weibo",
+    "zhihu",
+    "bilibili",
+    "mongo",
+    "redis"
+  ],
+  "bin": {
+    "daily-hot-api": "bin/daily-hot-api.js"
+  },
+  "main": "dist/main.js",
+  "files": [
+    "bin/",
+    "dist/",
+    "views/",
+    ".env.example"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
   "engines": {
     "node": ">=24.0.0",
     "npm": ">=11.0.0"
@@ -17,6 +52,9 @@
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
+    "cli": "node bin/daily-hot-api.js",
+    "prepublishOnly": "npm run build",
+    "pack:check": "npm pack --dry-run",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\"",
     "lint:fix": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "jest",
