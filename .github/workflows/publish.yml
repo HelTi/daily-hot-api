@@ -24,6 +24,8 @@ concurrency:
 jobs:
   publish:
     name: Publish @ttkit/daily-hot-api
+    # 只有 npm 版本 tag（如 v0.1.3）才发布 npm；skill-v1.0.0 等 skill 专用 tag 跳过。
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'v')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
