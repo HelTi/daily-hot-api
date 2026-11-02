@@ -100,6 +100,34 @@ src/cli/commands/          start / stop / status / restart / logs
 - 退出码：`0` 成功、`1` 运行错误、`2` 用法错误、`3` status 未运行。
 - 发布前：`npm run build`、`npm run pack:check`，确认 tarball 不含 `.env`、docs 缓存或测试文件；`prepublishOnly` 会自动构建。CLI 测试在 `src/cli/*.spec.ts`。
 
+## Agent Skill（skills/daily-hot-api）
+
+仓库内维护一个公开的 Agent Skill，供 Claude Code、Codex、Cursor、Copilot、OpenCode、OpenClaw 等宿主通过 `npx skills add HelTi/daily-hot-api` 安装。它包装已发布的 CLI，不修改 `src/` 业务代码。
+
+结构：
+
+```text
+skills/daily-hot-api/
+  SKILL.md                 # 只允许官方 6 个 frontmatter 字段；<500 行
+  scripts/daily-hot.mjs    # 唯一入口：doctor/ensure/status/sources/hot/history/brief/stop
+  scripts/lib/             # cli/http/service/errors，仅 Node 内置模块
+  references/              # api/sources/history/daily-brief/remote-deploy/troubleshooting
+test/skill/*.test.mjs      # node:test，mock HTTP，不依赖外网
+evals/daily-hot-api/       # 触发评测集 + run-trigger-eval.mjs（catalog/claude/codex）
+.github/workflows/skill-ci.yml
+```
+
+约定：
+
+- skill 声明最低兼容 CLI 版本（`scripts/lib/cli.mjs` 的 `CLI_PIN` + `SKILL.md` metadata）：本地 CLI >= 该版本时复用，否则 npx 使用该精确版本，禁止 `@latest`；CLI 发版后 1 周内评估更新 pin、`compatibility`、references，并跑测试。
+- 只读原则：skill 不调用 `POST /api/briefs/generate`、`DELETE`、`scheduler/*` 写接口；`stop` 只停自己启动的实例。
+- 自动启动的隔离实例使用最小配置（不开简报、不连 Mongo，状态目录 `~/.daily-hot-api-skill`），不读取用户 cwd `.env`。
+- 退出码与 CLI 不同：skill 用 `0/2/3/4/5`（5=未运行，CLI 的 3=未运行），改脚本时同步 `references/api.md` 与 `SKILL.md`。
+- frontmatter 只写 `name/description/license/compatibility/metadata`（不要加自定义顶层字段）；`name` 必须与目录名一致。
+- 修改 API 行为、热榜来源或 CLI 选项时，同步更新 `references/`、`docs/guide/agent-skill.md`、`docs/development/agent-skill.md` 和相关测试。
+- 修改 `description` 后必须重跑触发评测：`node evals/daily-hot-api/run-trigger-eval.mjs --dry-run`（CI）；发布前用 catalog + 至少一个真实宿主各跑一次并达到阈值。
+- 验证：`node --test test/skill/*.test.mjs`、`node evals/daily-hot-api/run-trigger-eval.mjs --dry-run`、`agentskills validate skills/daily-hot-api`、`npx -y skills@1.7.4 add . --list`。
+
 ## Configuration
 
 Defaults and validation rules live only in `src/config/validation.schema.ts`. `src/config/configuration.ts` just parses `process.env` through that schema, so it needs no edit when adding a variable.

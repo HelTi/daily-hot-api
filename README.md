@@ -4,6 +4,8 @@
 
 📖 [在线文档](https://helti.github.io/daily-hot-api/) · [快速开始](./docs/guide/getting-started.md) · [API 参考](./docs/reference/api.md) · [开发指南](./docs/development/architecture.md)
 
+[![skills.sh](https://skills.sh/b/HelTi/daily-hot-api)](https://skills.sh/HelTi/daily-hot-api)
+
 
 ## 功能特性
 
@@ -15,6 +17,7 @@
 - 🎯 基于 URL 的数据去重机制
 - 🤖 AI分析数据生成深度简报
 - 🖥️ 支持 npm 全局安装的 CLI，一条命令启动/停止热点服务
+- 🧠 提供 Agent Skill，Claude Code、Codex、Cursor 等 agent 可直接查询热榜/历史/简报
 
 ## 支持的站点
 
@@ -145,6 +148,28 @@ node bin/daily-hot-api.js start -d --config .env
 不想全局安装时可以直接用 npx：`npx @ttkit/daily-hot-api --help`。
 
 CLI 会把运行状态和后台日志写入 `~/.daily-hot-api`（可用 `DAILY_HOT_API_HOME` 或 `--home` 修改），端口默认取 `.env` 的 `PORT`，否则 6689。完整命令、退出码和故障排查见[命令行工具文档](https://helti.github.io/daily-hot-api/guide/cli)。
+
+## Agent Skill（给 AI Agent 用）
+
+仓库内置了符合 [Agent Skills](https://agentskills.io/specification) 规范的 skill：`skills/daily-hot-api`。安装后，Claude Code、Codex、Cursor、Copilot、OpenCode、OpenClaw 等 agent 可以直接获取 60+ 平台热榜、历史热点和只读的 AI 每日简报。
+
+```bash
+# 安装到用户级（所有项目可用）
+npx skills add HelTi/daily-hot-api --skill daily-hot-api -g
+
+# 或只装到 Claude Code
+npx skills add HelTi/daily-hot-api --skill daily-hot-api -g -a claude-code -y
+```
+
+然后直接用自然语言提问，例如：
+
+- “今天微博、知乎、B 站都有什么热点？各取前 10 条。”
+- “汇总今天科技圈热榜，带来源链接。”
+- “读一下今天的 AI 每日简报。”
+
+skill 会自动连接或启动一个本地隔离实例（零配置、无需 API Key）；历史热点与 AI 简报需要连接已配置 MongoDB / AI Key 的自建实例（`DAILY_HOT_API_BASE_URL`）。状态目录默认为 `~/.daily-hot-api-skill`，`stop` 只停止 skill 自己启动的实例。
+
+环境要求：Node.js >= 22.20（推荐 24）、可访问 npm 与热榜来源站点。详见[Agent Skill 使用文档](https://helti.github.io/daily-hot-api/guide/agent-skill)和[维护说明](./docs/development/agent-skill.md)。
 
 ## API 接口
 

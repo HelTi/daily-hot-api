@@ -1,0 +1,103 @@
+name: Skill CI
+
+# 校验 skills/daily-hot-api：规范、脚本语法、单元/集成测试、skills CLI 发现。
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-skill:
+    name: Validate Agent Skill (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['22.20.0', '24']
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Install Agent Skills validator
+        run: |
+          python3 -m venv /tmp/skills-ref-venv
+          /tmp/skills-ref-venv/bin/pip install --quiet skills-ref==0.1.1
+
+      - name: Validate SKILL.md frontmatter
+        run: /tmp/skills-ref-venv/bin/agentskills validate skills/daily-hot-api
+
+      - name: Check SKILL.md shape and frontmatter fields
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+          const file = 'skills/daily-hot-api/SKILL.md';
+          const text = fs.readFileSync(file, 'utf8');
+          const lines = text.split('\n');
+          if (lines.length > 500) {
+            console.error(`SKILL.md 超过 500 行：${lines.length}`);
+            process.exit(1);
+          }
+          const match = text.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+          if (!match) {
+            console.error('缺少 frontmatter');
+            process.exit(1);
+          }
+          const allowed = new Set([
+            'name', 'description', 'license', 'compatibility', 'metadata', 'allowed-tools',
+          ]);
+          const keys = [...match[1].matchAll(/^([a-zA-Z0-9-]+):/gm)].map((m) => m[1]);
+          const unexpected = keys.filter((key) => !allowed.has(key));
+          if (unexpected.length > 0) {
+            console.error(`frontmatter 含非官方字段：${unexpected.join(', ')}`);
+            process.exit(1);
+          }
+          if (!/^name:\s*daily-hot-api\s*$/m.test(match[1])) {
+            console.error('frontmatter name 必须是 daily-hot-api');
+            process.exit(1);
+          }
+          console.log(`SKILL.md ok (${lines.length} lines, fields: ${keys.join(', ')})`);
+          NODE
+
+      - name: Syntax check scripts
+        run: |
+          node --check skills/daily-hot-api/scripts/daily-hot.mjs
+          for file in skills/daily-hot-api/scripts/lib/*.mjs; do
+            node --check "$file"
+          done
+          node --check evals/daily-hot-api/run-trigger-eval.mjs
+
+      - name: Unit and mock integration tests
+        run: node --test test/skill/*.test.mjs
+
+      - name: Validate trigger-eval dataset
+        run: node evals/daily-hot-api/run-trigger-eval.mjs --dry-run
+
+      - name: Verify skills CLI discovery
+        env:
+          DISABLE_TELEMETRY: '1'
+        run: |
+          npx -y skills@1.7.4 add . --list | tee /tmp/skills-list.txt
+          grep -q 'daily-hot-api' /tmp/skills-list.txt
+
+      - name: Compare CLI pin with npm latest (warning only)
+        continue-on-error: true
+        run: |
+          PIN=$(node -e "const fs=require('fs');const t=fs.readFileSync('skills/daily-hot-api/scripts/lib/cli.mjs','utf8');const m=t.match(/export const CLI_PIN = '([^']+)'/);process.stdout.write(m[1])")
+          LATEST=$(npm view @ttkit/daily-hot-api version)
+          echo "CLI_PIN=$PIN npm latest=$LATEST"
+          if [ "$PIN" != "$LATEST" ]; then
+            echo "::warning::CLI_PIN ($PIN) 与 npm latest ($LATEST) 不一致，请评估升级 skill 的 CLI 兼容版本"
+          fi
+
+      - name: Smoke test help output
+        run: node skills/daily-hot-api/scripts/daily-hot.mjs --help > /dev/null
