@@ -255,7 +255,7 @@ CLI 管理的是自己启动的进程（通过状态目录里的 PID），不会
 
 ## 发布到 npm（维护者）
 
-当前已经以 `0.1.1` 发布。发布新版本前先更新版本号，并合并到 `main`：
+当前已经以 `0.1.2` 发布。发布新版本前先更新版本号，并合并到 `main`：
 
 ```bash
 npm version patch|minor|major --no-git-tag-version

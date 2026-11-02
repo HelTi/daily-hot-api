@@ -71,7 +71,7 @@ DAILY_HOT_API_HOME=/tmp/dha-home node bin/daily-hot-api.js stop
 
 ## CLI（npm 包）
 
-`package.json` 已配置为可发布的 CLI 包：npm 包名 `@ttkit/daily-hot-api`（scoped），bin 命令名 `daily-hot-api`，`files` 白名单（`bin/ dist/ views/ .env.example`）、`main: dist/main.js`、`publishConfig.access: public`、`publishConfig.registry: https://registry.npmjs.org/`、`prepublishOnly` 构建，并移除了 `private`。当前已发布 `0.1.1`。非 scoped 的 `daily-hot-api` 与 npm 上已有的 `dailyhotapi` 太相似而无法注册，不要改回；npm 若把首版/新版本放入 staged 队列，需要维护者在 npmjs.com 的 Staged Packages 页面用 2FA 审批。发布推荐 Trusted Publishing：`.github/workflows/publish.yml` 通过 GitHub Actions OIDC 发布（npm 包设置里的 Trusted Publisher 填写 `HelTi` / `daily-hot-api` / `publish.yml`，Allowed actions 勾选 `npm publish`），本地 token 发布仍可用。CLI 文档在 `docs/guide/cli.md`。
+`package.json` 已配置为可发布的 CLI 包：npm 包名 `@ttkit/daily-hot-api`（scoped），bin 命令名 `daily-hot-api`，`files` 白名单（`bin/ dist/ views/ .env.example`）、`main: dist/main.js`、`publishConfig.access: public`、`publishConfig.registry: https://registry.npmjs.org/`、`prepublishOnly` 构建，并移除了 `private`。当前已发布 `0.1.2`。非 scoped 的 `daily-hot-api` 与 npm 上已有的 `dailyhotapi` 太相似而无法注册，不要改回；npm 若把首版/新版本放入 staged 队列，需要维护者在 npmjs.com 的 Staged Packages 页面用 2FA 审批。发布推荐 Trusted Publishing：`.github/workflows/publish.yml` 通过 GitHub Actions OIDC 发布（npm 包设置里的 Trusted Publisher 填写 `HelTi` / `daily-hot-api` / `publish.yml`，Allowed actions 勾选 `npm publish`），本地 token 发布仍可用。CLI 文档在 `docs/guide/cli.md`。
 
 代码结构：
 
