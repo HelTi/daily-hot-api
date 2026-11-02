@@ -1,6 +1,6 @@
 {
   "name": "@ttkit/daily-hot-api",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "一个基于 NestJS 的每日热榜聚合 API 服务，支持多个平台的热榜数据获取，支持本地部署、pm2部署、docker部署，并提供可全局安装的 CLI 启动/停止热点服务。",
   "author": "Helti",
   "license": "MIT",
