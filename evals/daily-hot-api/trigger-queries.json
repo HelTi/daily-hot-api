@@ -1,0 +1,147 @@
+{
+  "skill": "daily-hot-api",
+  "version": 1,
+  "notes": "触发评测集：10 个正样本 + 10 个近义负样本。正样本覆盖热榜、财经、历史、气象、简报和中英混合提问；负样本覆盖抓正文、评论、行情、天气、爬虫、本地文件、论文检索、监控推送、用户主页和 GitHub API 等近似但不应触发的场景。",
+  "queries": [
+    {
+      "id": "pos-01",
+      "query": "帮我看看今天微博热搜都有哪些？",
+      "should_trigger": true,
+      "category": "hot-list",
+      "rationale": "直接请求实时热榜数据。"
+    },
+    {
+      "id": "pos-02",
+      "query": "知乎热榜现在排名前十的是什么，整理成带链接的列表。",
+      "should_trigger": true,
+      "category": "hot-list",
+      "rationale": "指定平台 + 榜单 + 链接，正是 skill 的实时热榜能力。"
+    },
+    {
+      "id": "pos-03",
+      "query": "B 站今天的热门视频榜单帮我拉一下，看看前 10 个。",
+      "should_trigger": true,
+      "category": "hot-list",
+      "rationale": "Bilibili 是内置来源之一。"
+    },
+    {
+      "id": "pos-04",
+      "query": "今天全网有什么热点？多找几个平台对比一下，别只看一个来源。",
+      "should_trigger": true,
+      "category": "cross-platform",
+      "rationale": "跨平台热点汇总，skill 支持多来源查询。"
+    },
+    {
+      "id": "pos-05",
+      "query": "财联社和第一财经今天有什么头条？顺便看看华尔街见闻。",
+      "should_trigger": true,
+      "category": "finance",
+      "rationale": "财经来源的热榜/头条查询。"
+    },
+    {
+      "id": "pos-06",
+      "query": "抖音热榜和快手热榜今天的内容对比一下，各自前 10 条。",
+      "should_trigger": true,
+      "category": "hot-list",
+      "rationale": "两个内置来源的榜单对比。"
+    },
+    {
+      "id": "pos-07",
+      "query": "汇总今天科技圈的热点：掘金、36氪、GitHub Trending 都看看。",
+      "should_trigger": true,
+      "category": "tech",
+      "rationale": "科技来源热榜汇总。"
+    },
+    {
+      "id": "pos-08",
+      "query": "历史上的今天 3 月 8 日发生过什么大事？",
+      "should_trigger": true,
+      "category": "history",
+      "rationale": "历史来源支持 month/day 参数。"
+    },
+    {
+      "id": "pos-09",
+      "query": "北京现在有什么气象预警？帮我看看中央气象台发布的预警。",
+      "should_trigger": true,
+      "category": "weather",
+      "rationale": "中央气象台来源支持 province 参数。"
+    },
+    {
+      "id": "pos-10",
+      "query": "读一下今天的 AI 每日简报，再补充一下 Hacker News 上今天的热门。",
+      "should_trigger": true,
+      "category": "brief",
+      "rationale": "只读简报 + Hacker News 实时热榜，均为 skill 能力。"
+    },
+    {
+      "id": "neg-01",
+      "query": "帮我把这篇新闻的正文抓下来，保存成 markdown 文件。",
+      "should_trigger": false,
+      "category": "near-miss-fulltext",
+      "rationale": "需要文章正文抓取，skill 只提供热榜条目，不抓正文。"
+    },
+    {
+      "id": "neg-02",
+      "query": "微博热搜第一条的评论区都在说什么？帮我总结一下。",
+      "should_trigger": false,
+      "category": "near-miss-comments",
+      "rationale": "需要评论内容，skill 不抓评论。"
+    },
+    {
+      "id": "neg-03",
+      "query": "查一下贵州茅台现在的股价、涨跌幅和市盈率。",
+      "should_trigger": false,
+      "category": "near-miss-quote",
+      "rationale": "需要实时行情/K 线数据；skill 只有热股排行，不提供个股实时行情。"
+    },
+    {
+      "id": "neg-04",
+      "query": "今天北京天气怎么样，下午需要带伞吗？",
+      "should_trigger": false,
+      "category": "near-miss-weather",
+      "rationale": "需要天气预报；skill 的气象来源只有预警，不是天气预报。"
+    },
+    {
+      "id": "neg-05",
+      "query": "写个 Python 脚本，每天定时爬微博热搜存到数据库里。",
+      "should_trigger": false,
+      "category": "near-miss-scraper",
+      "rationale": "用户要自己实现爬虫，不是调用现成热榜能力。"
+    },
+    {
+      "id": "neg-06",
+      "query": "帮我总结一下本地 report.md 的内容，提炼三个要点。",
+      "should_trigger": false,
+      "category": "unrelated",
+      "rationale": "本地文件处理，与热榜无关。"
+    },
+    {
+      "id": "neg-07",
+      "query": "搜索一下最新的 AI 论文，找几篇关于多模态的。",
+      "should_trigger": false,
+      "category": "near-miss-search",
+      "rationale": "通用学术搜索，不是热榜来源。"
+    },
+    {
+      "id": "neg-08",
+      "query": "监控微博热搜，一有变化就推送到我微信。",
+      "should_trigger": false,
+      "category": "near-miss-monitoring",
+      "rationale": "需要实时监控/推送，skill 只做按需查询。"
+    },
+    {
+      "id": "neg-09",
+      "query": "看看知乎这个答主的其他回答，按时间排一下。",
+      "should_trigger": false,
+      "category": "near-miss-profile",
+      "rationale": "需要用户主页/回答列表，不是热榜。"
+    },
+    {
+      "id": "neg-10",
+      "query": "用 GitHub API 查一下这个仓库现在有多少 star。",
+      "should_trigger": false,
+      "category": "near-miss-api",
+      "rationale": "需要 GitHub API 查询具体仓库，不是 GitHub Trending 榜单。"
+    }
+  ]
+}

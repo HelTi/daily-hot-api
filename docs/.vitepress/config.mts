@@ -25,6 +25,7 @@ export default defineConfig({
             { text: '快速开始', link: '/guide/getting-started' },
             { text: '环境配置', link: '/guide/configuration' },
             { text: '命令行工具', link: '/guide/cli' },
+            { text: 'Agent Skill', link: '/guide/agent-skill' },
             { text: '获取热榜', link: '/guide/hot-lists' },
           ],
         },
@@ -56,6 +57,7 @@ export default defineConfig({
             { text: '添加热榜源', link: '/development/add-hot-source' },
             { text: '数据库与缓存', link: '/development/database-and-cache' },
             { text: '调度器实现', link: '/development/scheduler' },
+            { text: 'Agent Skill 维护', link: '/development/agent-skill' },
             {
               text: '每日简报前端接入',
               link: '/development/daily-brief-frontend',

@@ -59,6 +59,16 @@ daily-hot-api stop          # 停止服务
 CLI 默认读取当前工作目录的 `.env` 并支持 `--config` 指定配置文件，详见[命令行工具](/guide/cli)。
 :::
 
+::: tip 用 Agent Skill
+如果使用 Claude Code、Codex、Cursor 等 agent，可以安装仓库内置的 Agent Skill，让 agent 直接查热榜：
+
+```bash
+npx skills add HelTi/daily-hot-api --skill daily-hot-api -g
+```
+
+详见 [Agent Skill](/guide/agent-skill)。
+:::
+
 ## 验证
 
 检查服务状态：
