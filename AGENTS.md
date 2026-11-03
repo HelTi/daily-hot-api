@@ -124,8 +124,9 @@ evals/daily-hot-api/       # 触发评测集 + run-trigger-eval.mjs（catalog/cl
 - skill 声明最低兼容 CLI 版本（`scripts/lib/cli.mjs` 的 `CLI_PIN` + `SKILL.md` metadata）：本地 CLI >= 该版本时复用，否则 npx 使用该精确版本，禁止 `@latest`；CLI 发版后 1 周内评估更新 pin、`compatibility`、references，并跑测试。
 - 启动标记 `.started-by-skill` 的生命周期是正确性要点：在 CLI 确认进程已起来之后、健康检查之前写入；只有 CLI `stop` 返回 0 才删除。健康检查失败或 `stop` 失败都必须保留标记，否则实例再也停不掉。
 - 实例探测先用标记里的 `baseUrl` 打 `/health`（命中就不 spawn CLI），`detectCli()` 结果在进程内缓存；`ensure` 发现旧的 skill 实例不健康时会先 stop 再起新的。
-- 自动启动的实例写 `HOST=127.0.0.1`。`HOST` 由 CLI 0.1.3 引入，而 `CLI_PIN` 仍固定 0.1.2（发布与 pin 升级必须分两步，见下一条），此时该变量被 zod 丢弃：不报错，但实例仍监听所有网卡。
-- **`CLI_PIN` 的升级时机**：只有在 `npm view @ttkit/daily-hot-api version` 确认新版本真正可安装之后才改（npm 可能把新版本放进 staged 队列，需要 2FA 审批）。提前改会让 skill 去 npx 一个不存在的版本，所有用户直接失败。要改的位置和发布后清单见 `docs/guide/cli.md` 的「发布后：同步 Agent Skill 的 CLI 固定版本」。
+- `runCommand` 默认在 `os.tmpdir()` 里执行 CLI，**不要**改成继承 cwd：npx 发现 cwd 所在项目能提供同名 bin（package.json 声明了 `daily-hot-api`，或有 `node_modules/.bin/daily-hot-api`）时会无视 `@<version>` 直接跑那个命令，`CLI_PIN` 被静默绕过。在本仓库里跑 skill 就会命中这个坑。
+- 自动启动的实例写 `HOST=127.0.0.1`，只绑定回环地址（`HOST` 由 CLI 0.1.3 引入，`CLI_PIN` 已固定该版本）。
+- **`CLI_PIN` 的升级时机**：只有在 `npm view @ttkit/daily-hot-api version --registry=https://registry.npmjs.org/` 确认新版本真正可安装之后才改（npm 会把新版本放进 staged 队列，要维护者用 2FA 审批；审批后镜像还可能滞后几十分钟）。提前改会让 skill 去 npx 一个不存在的版本，所有用户直接失败。要改的位置和发布后清单见 `docs/guide/cli.md` 的「发布后：同步 Agent Skill 的 CLI 固定版本」。
 - `--param` 的 key 允许字母开头的字母/数字/`_`/`-`（含驼峰，如 `pageSize`，服务端 DTO 有这个字段）；所有用法校验都要在 `ensureService()` 之前完成，别让用法错误先等一次 npx 下载。
 - 只读原则：skill 不调用 `POST /api/briefs/generate`、`DELETE`、`scheduler/*` 写接口；`stop` 只停自己启动的实例。
 - 自动启动的隔离实例使用最小配置（不开简报、不连 Mongo，状态目录 `~/.daily-hot-api-skill`），不读取用户 cwd `.env`。

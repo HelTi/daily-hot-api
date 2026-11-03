@@ -12,7 +12,7 @@
 | 自动实例最小配置 | 当前服务监听 `0.0.0.0`，最小配置无 AI Key/无 Mongo，暴露面仅公开热榜数据 |
 | 默认缓存、默认 10 条、desc 截断 | 控制上下文体积与上游压力 |
 | 只读简报 | 生成消耗 AI 配额，必须由用户显式发起 |
-| CLI 固定版本 | 供应链安全与可复现：`npx --yes @ttkit/daily-hot-api@0.1.2`，禁止 `@latest` |
+| CLI 固定版本 | 供应链安全与可复现：`npx --yes @ttkit/daily-hot-api@0.1.3`，禁止 `@latest`。CLI 子进程跑在 `os.tmpdir()`，不继承 cwd——否则 cwd 所在项目能提供同名 bin 时 npx 会无视版本号 |
 
 已知限制：
 

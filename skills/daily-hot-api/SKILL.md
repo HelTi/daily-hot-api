@@ -8,7 +8,7 @@ metadata:
   version: "1.1.0"
   homepage: https://helti.github.io/daily-hot-api/
   repository: https://github.com/HelTi/daily-hot-api
-  cli-version: "0.1.2"
+  cli-version: "0.1.3"
 ---
 
 # daily-hot-api
@@ -114,7 +114,7 @@ node scripts/daily-hot.mjs stop
 
 - 不要打印、读取 `.env`、API Key、`~/.daily-hot-api-skill` 下的状态文件内容。
 - 不要调用 `POST /api/briefs/generate` 或任何 `scheduler/*` 写接口；本 skill 只读。生成简报会消耗 AI 配额，必须由用户显式发起。
-- 自动启动的实例配置里写了 `HOST=127.0.0.1`：CLI >= 0.1.3 只绑定回环地址。本 skill 当前固定 CLI `0.1.2`（见 frontmatter `cli-version`），该版本会忽略这个变量，所以**实际仍监听所有网卡**。两种情况下配置里都没有 AI Key、没有 Mongo 连接，只暴露公开热榜数据。不要用带 AI Key 的 `.env` 给 skill 启动实例。
+- 自动启动的实例只绑定 `127.0.0.1`（配置里写 `HOST=127.0.0.1`），不会暴露到局域网；配置里也没有 AI Key、没有 Mongo 连接，只暴露公开热榜数据。不要用带 AI Key 的 `.env` 给 skill 启动实例。
 - 单次请求最多查 3 个来源；不要循环 `--no-cache` 刷上游导致被限流。
 - 上游来源可能临时失败：如实告诉用户哪个来源失败，可换同类来源重试一次。
 
