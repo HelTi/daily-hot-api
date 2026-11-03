@@ -21,3 +21,6 @@ jobs:
       - run: npm run lint
       - run: npm test -- --runInBand
       - run: npm run test:e2e -- --runInBand
+      # CLI 的派生后台进程、状态文件与健康轮询只有真实跑一遍才能覆盖。
+      - run: npm run test:cli
+      - run: npm run pack:check

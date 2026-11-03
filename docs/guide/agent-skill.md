@@ -103,7 +103,7 @@ node scripts/daily-hot.mjs brief latest
 | 日志 | `~/.daily-hot-api-skill/logs/daily-hot-api.log` |
 | 启动标记 | `~/.daily-hot-api-skill/.started-by-skill` |
 
-可用 `DAILY_HOT_API_SKILL_HOME` 覆盖。`stop` 只停止带启动标记的实例。
+可用 `DAILY_HOT_API_SKILL_HOME` 覆盖。`stop` 只停止带启动标记的实例；停止失败时标记会保留，可以直接重试 `stop`。
 
 ## 更新与卸载
 
@@ -120,7 +120,7 @@ skill 版本与最低兼容的 CLI 版本记录在 `SKILL.md` 的 `metadata` 中
 ## 安全与隐私
 
 - skill 不收集遥测；数据只在本机与热榜上游站点之间流动。
-- 自动启动的实例监听所有网卡（当前服务端未提供 host 配置），但配置中没有 AI Key、没有 Mongo 连接，只暴露公开热榜数据。
+- 自动启动的实例写入 `HOST=127.0.0.1`：CLI >= 0.1.3 只绑定回环地址。skill 当前固定 CLI `0.1.2`，该版本忽略这个变量，所以实际仍监听所有网卡；等 `CLI_PIN` 升到 0.1.3 后才会真正只绑定回环。两种情况下配置中都没有 AI Key、没有 Mongo 连接，只暴露公开热榜数据。
 - 不会读取、打印用户 `.env`、API Key 或状态文件内容。
 - 不会调用生成简报、删除历史、调度器等写接口。
 - 上游热榜是公开数据，但请遵守各站点使用条款，不要高频强制刷新。
@@ -146,7 +146,7 @@ node scripts/daily-hot.mjs doctor
 - 只支持“热榜快照”类查询，不抓取文章正文、评论或任意 URL。
 - 不提供实时监控/推送。
 - 不自动生成 AI 简报（会消耗配额，需用户显式发起）。
-- 上游来源可能临时失效，skill 会如实报错，不保证 64 个来源始终全部可用。
+- 上游来源可能临时失效，skill 会如实报错，不保证所有来源始终全部可用。
 
 ## 相关文档
 

@@ -100,10 +100,11 @@
 | `nytimes` | `area`: `china`（中文网）/ `global`（全球版） | `--param area=global` |
 | `history` | `month`、`day`（两位数字）或 `type=MM-DD` | `--param month=03 --param day=08` |
 | `weatheralarm` | `province`，如 `北京`；留空为全国 | `--param province=北京` |
-| `hupu` | `type`（topicId）、`page`、`pageSize`、`cursor` | `--param page=2 --param pageSize=10` |
+| `hupu` | `page`、`pageSize`、`cursor`；topicId 用专用选项 `--type` | `--param page=2 --param pageSize=10` |
 | `miyoushe` | `game`：`1` 崩坏3、`2` 原神、`3` 崩坏学园2、`4` 未定事件簿、`6` 崩坏：星穹铁道、`8` 绝区零 | `--param game=2` |
 
-未知参数会被服务端 400 拒绝；`--param` 不能覆盖 `limit` / `type` / `noCache` / `rss`。
+未知参数会被服务端 400 拒绝；`--param` 不能覆盖 `limit` / `type` / `noCache` / `rss`（这些用专用选项）。
+key 允许字母开头的字母、数字、`_`、`-`，大小写都可以，所以 `pageSize` 这类驼峰参数能直接传。
 
 ## 刷新限制
 

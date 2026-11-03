@@ -24,6 +24,14 @@ export const MIN_NODE_VERSION = '22.20.0';
 const IS_WINDOWS = process.platform === 'win32';
 const DEFAULT_TIMEOUT_MS = 120_000;
 
+/**
+ * detectCli() 的结果在单次进程内缓存。
+ *
+ * 每次 runCli 都重新探测会多 spawn 一个 `daily-hot-api --version`，
+ * 一条 skill 命令可能调用 CLI 多次，白等好几百毫秒。
+ */
+let cachedCli = null;
+
 export function parseVersion(text) {
   if (typeof text !== 'string') return null;
   const match = text.match(/(\d+)\.(\d+)\.(\d+)/);
@@ -169,7 +177,18 @@ async function probeGlobalCli() {
  * 只探测，不触发 npx 下载。doctor / status 用。
  * @returns {Promise<{kind: 'env'|'global'|'npx', command: string, prefixArgs: string[], version: string|null, globalVersion: string|null, note: string}>}
  */
+/** 仅测试用：清掉 detectCli 的进程内缓存。 */
+export function clearCliCache() {
+  cachedCli = null;
+}
+
 export async function detectCli() {
+  if (cachedCli) return cachedCli;
+  cachedCli = await probeCli();
+  return cachedCli;
+}
+
+async function probeCli() {
   assertNodeVersion();
 
   const override = process.env.DAILY_HOT_API_CLI?.trim();

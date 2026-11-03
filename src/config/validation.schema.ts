@@ -10,6 +10,14 @@ const envBoolean = (fallback: boolean) =>
 
 export const configValidationSchema = z.object({
   PORT: z.coerce.number().int().min(1).max(65535).default(6689),
+  // 监听地址。默认 0.0.0.0 保持既有行为（容器/反代需要）；
+  // 只给本机使用时设为 127.0.0.1，服务就不会暴露到局域网。
+  HOST: z
+    .string()
+    .trim()
+    .min(1)
+    .default('0.0.0.0')
+    .refine((value) => !/\s/u.test(value), 'HOST must not contain whitespace'),
   CACHE_TTL: z.coerce.number().default(3600),
   REQUEST_TIMEOUT: z.coerce.number().int().min(1000).default(6000),
   ALLOWED_DOMAIN: z.string().default('*'),

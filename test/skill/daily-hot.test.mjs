@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { createServer } from 'node:http';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { chmod, mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -10,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { compareVersions, parseVersion } from '../../skills/daily-hot-api/scripts/lib/cli.mjs';
 import { normalizeBaseUrl } from '../../skills/daily-hot-api/scripts/lib/http.mjs';
 import {
+  buildHotQuery,
   normalizeBrief,
   normalizeHistory,
   normalizeHot,
@@ -451,5 +453,154 @@ test('--help 与 --version 可用', async () => {
   assert.equal(help.code, 0);
   assert.match(help.stdout, /daily-hot-api agent skill/);
   const version = await runScript(['--version']);
-  assert.match(version.stdout, /1\.0\.0/);
+  assert.match(version.stdout, /1\.1\.0/);
+});
+
+test('buildHotQuery 接受驼峰参数，拒绝非法与保留 key', () => {
+  const query = buildHotQuery({
+    limit: '5',
+    params: ['pageSize=10', 'cursor=abc', 'area=china'],
+  });
+  assert.equal(query.limit, 5);
+  assert.equal(query.pageSize, '10');
+  assert.equal(query.cursor, 'abc');
+  assert.equal(query.area, 'china');
+
+  assert.throws(() => buildHotQuery({ params: ['1bad=x'] }), /key 不合法/);
+  assert.throws(() => buildHotQuery({ params: ['noCache=1'] }), /保留参数/);
+  assert.throws(() => buildHotQuery({ params: ['missing-value'] }), /key=value/);
+});
+
+test('hot 透传驼峰参数（服务端 DTO 支持 pageSize）', async () => {
+  requests.length = 0;
+  const result = await runScript([
+    'hot',
+    'zhihu',
+    '--param',
+    'pageSize=10',
+    '--base-url',
+    baseUrl,
+  ]);
+  assert.equal(result.code, 0, result.stderr);
+  const request = requests.find((url) => url.pathname === '/hot-lists/zhihu');
+  assert.equal(request.searchParams.get('pageSize'), '10');
+});
+
+test('用法错误先于连服务报出（退出码 2 而不是 4）', async () => {
+  const closed = createServer();
+  const port = await new Promise((resolve) => {
+    closed.listen(0, '127.0.0.1', () => {
+      const address = closed.address();
+      closed.close(() => resolve(address.port));
+    });
+  });
+  const result = await runScript([
+    'hot',
+    'zhihu',
+    '--param',
+    '1bad=x',
+    '--base-url',
+    `http://127.0.0.1:${port}`,
+  ]);
+  assert.equal(result.code, 2, result.stderr);
+  assert.match(result.stderr, /key 不合法/);
+});
+
+test('normalizeBrief 标注未完成状态且不伪造 markdown', () => {
+  const generating = normalizeBrief({
+    briefDate: '2026-11-02',
+    status: 'generating',
+    analysis: {},
+  });
+  assert.equal(generating.markdown, undefined);
+  assert.match(generating.note, /正在生成/);
+
+  const failed = normalizeBrief({ briefDate: '2026-11-02', status: 'failed' });
+  assert.match(failed.note, /failed/);
+
+  const ok = normalizeBrief({ status: 'success', markdown: '# ok' });
+  assert.equal(ok.note, undefined);
+});
+
+/** 写一个会记录调用并按需失败的假 CLI，用来验证不该调用 CLI 的路径。 */
+async function writeFakeCli(dir, { exitCode = 0, stdout = '{}' } = {}) {
+  const cliPath = path.join(dir, 'fake-cli.mjs');
+  const callLog = path.join(dir, 'cli-calls.log');
+  await writeFile(
+    cliPath,
+    [
+      '#!/usr/bin/env node',
+      "import { appendFileSync } from 'node:fs';",
+      `appendFileSync(${JSON.stringify(callLog)}, process.argv.slice(2).join(' ') + '\\n');`,
+      `process.stdout.write(${JSON.stringify(stdout)});`,
+      `process.exit(${exitCode});`,
+      '',
+    ].join('\n'),
+    'utf8',
+  );
+  await chmod(cliPath, 0o755);
+  return { cliPath, callLog };
+}
+
+test('stop 失败时保留 marker，实例仍可被再次 stop', async (t) => {
+  if (process.platform === 'win32') {
+    t.skip('依赖 POSIX shebang 可执行文件');
+    return;
+  }
+  const home = await mkdtemp(path.join(os.tmpdir(), 'dha-skill-stop-'));
+  try {
+    const { cliPath } = await writeFakeCli(home, {
+      exitCode: 1,
+      stdout: '{"stopped":false}',
+    });
+    const markerFile = path.join(home, '.started-by-skill');
+    await writeFile(markerFile, JSON.stringify({ port: 1, baseUrl: 'http://127.0.0.1:1' }));
+
+    const failed = await runScript(['stop'], {
+      env: { DAILY_HOT_API_SKILL_HOME: home, DAILY_HOT_API_CLI: cliPath },
+    });
+    assert.equal(failed.code, 4);
+    assert.match(failed.stderr, /标记文件已保留/);
+
+    // marker 还在：换成会成功的 CLI 后仍然能停。
+    const { cliPath: okCli } = await writeFakeCli(home, {
+      exitCode: 0,
+      stdout: '{"stopped":true}',
+    });
+    const ok = await runScript(['stop'], {
+      env: { DAILY_HOT_API_SKILL_HOME: home, DAILY_HOT_API_CLI: okCli },
+    });
+    assert.equal(ok.code, 0, ok.stderr);
+    assert.equal(JSON.parse(ok.stdout).stopped, true);
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+test('marker 命中时不再为了拿端口去 spawn CLI', async (t) => {
+  if (process.platform === 'win32') {
+    t.skip('依赖 POSIX shebang 可执行文件');
+    return;
+  }
+  const home = await mkdtemp(path.join(os.tmpdir(), 'dha-skill-marker-'));
+  try {
+    const { cliPath, callLog } = await writeFakeCli(home);
+    await mkdir(path.join(home, 'logs'), { recursive: true });
+    await writeFile(
+      path.join(home, '.started-by-skill'),
+      JSON.stringify({ port: 1, baseUrl, cliVersion: '0.1.2' }),
+    );
+
+    const result = await runScript(['status'], {
+      env: { DAILY_HOT_API_SKILL_HOME: home, DAILY_HOT_API_CLI: cliPath },
+    });
+    assert.equal(result.code, 0, result.stderr);
+    const data = parseJson(result);
+    assert.equal(data.running, true);
+    assert.equal(data.source, 'skill');
+    assert.equal(data.baseUrl, baseUrl);
+    assert.equal(existsSync(callLog), false, 'marker 命中时不应调用 CLI');
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
 });

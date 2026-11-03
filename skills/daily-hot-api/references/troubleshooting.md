@@ -47,12 +47,15 @@ npm config set registry https://registry.npmmirror.com
 
 - 看 `~/.daily-hot-api-skill/logs/daily-hot-api.log`。
 - 常见原因：Node 版本、npm 包不完整、配置校验失败、端口权限。
-- 可以手动清理隔离状态后重试：
+- 启动标记在进程起来后就会写入，所以这种实例仍然可以用 `stop` 停掉：
 
 ```bash
-rm -rf ~/.daily-hot-api-skill
+node scripts/daily-hot.mjs stop
 node scripts/daily-hot.mjs ensure
 ```
+
+- 下一次 `ensure` 也会先停掉这个不健康的旧实例，不会越积越多。
+- 实在要手动清理：`rm -rf ~/.daily-hot-api-skill` 之前先确认进程已退出（`daily-hot-api status --home ~/.daily-hot-api-skill`），否则会留下无人管理的进程。
 
 ### `/ready` 非 200 / history 500 / brief 500
 
@@ -82,6 +85,17 @@ export DAILY_HOT_API_BASE_URL=http://127.0.0.1:6689
 - 状态目录由 `DAILY_HOT_API_SKILL_HOME` 决定（默认 `~/.daily-hot-api-skill`）。如果设置过自定义目录，停止时要用同一个值。
 - 需要强制清理时，用户可以自己执行 `daily-hot-api stop`（会操作默认状态目录）。
 
+### `stop` 报「停止服务失败」（退出码 4）
+
+- 实例可能还在运行，标记文件会**保留**，所以可以直接重试 `stop`。
+- CLI 提示「PID 无法确认是 daily-hot-api 进程」时（PID 被复用），按它给的命令处理：
+
+```bash
+daily-hot-api stop --force --home ~/.daily-hot-api-skill
+```
+
+- 这一步会发 SIGKILL，必须由用户确认后执行，skill 自己不会加 `--force`。
+
 ### Windows
 
 - 优先在 WSL 或 Git Bash 中运行。
@@ -95,7 +109,7 @@ export DAILY_HOT_API_BASE_URL=http://127.0.0.1:6689
 | 0 | 成功 | — |
 | 2 | 用法错误 / 4xx | 修正参数；先 `sources` |
 | 3 | 前置条件不满足 | 升级 Node、修复 CLI/启动问题 |
-| 4 | 服务/上游失败 | 重试一次；检查网络、日志 |
+| 4 | 服务/上游失败 | 重试一次；检查网络、日志（`stop` 失败时标记保留，可直接重试） |
 | 5 | 服务未运行 | `ensure` 或设置 `DAILY_HOT_API_BASE_URL` |
 
 ## 相关文档

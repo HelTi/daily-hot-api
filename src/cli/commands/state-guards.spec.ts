@@ -23,6 +23,7 @@ function makeState(port = 7000): RunState {
   return {
     pid: process.pid,
     port,
+    host: '127.0.0.1',
     mode: 'daemon',
     startedAt: new Date().toISOString(),
     cwd: '/tmp',

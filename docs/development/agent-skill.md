@@ -49,6 +49,8 @@ SKILL.md 只保留高频步骤和硬规则；详细接口、来源、排障放 `
 - 自动启动状态目录：`DAILY_HOT_API_SKILL_HOME`，默认 `~/.daily-hot-api-skill`。
 - 配置 `skill.env`：随机/默认端口、`BRIEF_ENABLED=false`、`SCHEDULER_AUTO_START=false`、`MONGODB_URI` 指向不可达地址（避免误连用户 Mongo）。
 - 启动标记：`.started-by-skill`；`stop` 只处理带标记的实例。
+- 标记在 CLI 确认进程已启动之后、健康检查之前写入；`stop` 只在 CLI 返回 0 时删除标记。健康检查失败或停止失败都不会丢标记，保证实例始终可停。
+- 实例探测优先读标记里的 `baseUrl` 直接打 `/health`，命中就不再 spawn CLI；`detectCli()` 的结果在单进程内缓存。
 - 用户自己启动的实例永远只读：不 stop、不改配置。
 
 ## 脚本契约
@@ -85,7 +87,7 @@ agentskills validate skills/daily-hot-api
 npx -y skills@1.7.4 add . --list
 ```
 
-测试覆盖：参数解析、URL/日期校验、结果瘦身、命令透传、4xx/5xx/未运行退出码、`--param` 透传、`stop` 不误停。
+测试覆盖：参数解析、URL/日期校验、结果瘦身、命令透传、4xx/5xx/未运行退出码、`--param` 透传（含驼峰 key）、用法错误先于连服务、简报未完成状态的 `note`、`stop` 失败保留标记、标记命中时不 spawn CLI、`stop` 不误停。
 
 CI：`.github/workflows/skill-ci.yml` 在 Node 22.20 与 24 上分别执行规范校验、`node --check`、`node --test`、`npx skills add . --list` 发现断言。
 
@@ -128,7 +130,8 @@ node evals/daily-hot-api/run-trigger-eval.mjs --provider codex --runs 1
 
 - **API 行为变化**：更新 `references/api.md`、脚本 normalize 逻辑与测试。
 - **新增/下线来源**：来源清单以 `/hot-lists/all` 为准；只在 `references/sources.md` 维护常用集合与专属参数，不做硬编码校验。
-- **CLI 新增参数**：评估是否透传到脚本；优先用 `--param` 覆盖来源专属参数。
+- **CLI 新增参数**：评估是否透传到脚本；优先用 `--param` 覆盖来源专属参数（key 允许字母开头的字母/数字/`_`/`-`，含驼峰）。
+- **新增热榜来源**：同步 `references/sources.md`，CI 会对比来源注册表与该文档，不一致直接失败。
 - **Node/CLI 升级**：更新 `CLI_PIN`、`compatibility`、CI matrix，跑发布 SOP 第 4 步。
 - **上游失效**：项目侧修 source；skill 侧只需更新排障提示。
 

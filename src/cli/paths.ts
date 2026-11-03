@@ -7,6 +7,9 @@ export const APP_NAME = 'daily-hot-api';
 /** 应用默认端口，与 src/config/validation.schema.ts 的 PORT 默认值保持一致。 */
 export const DEFAULT_PORT = 6689;
 
+/** 应用默认监听地址，与 src/config/validation.schema.ts 的 HOST 默认值保持一致。 */
+export const DEFAULT_HOST = '0.0.0.0';
+
 /** stop/restart 等待进程退出的默认超时时间（秒）。 */
 export const DEFAULT_STOP_TIMEOUT_SECONDS = 10;
 

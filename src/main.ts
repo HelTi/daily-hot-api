@@ -74,7 +74,8 @@ export async function bootstrap(): Promise<NestExpressApplication> {
   });
 
   const port = config.getOrThrow<number>('PORT');
-  await app.listen(port);
+  const host = config.getOrThrow<string>('HOST');
+  await app.listen(port, host);
   return app;
 }
 

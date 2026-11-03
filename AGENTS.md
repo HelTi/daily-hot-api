@@ -71,7 +71,7 @@ DAILY_HOT_API_HOME=/tmp/dha-home node bin/daily-hot-api.js stop
 
 ## CLI（npm 包）
 
-`package.json` 已配置为可发布的 CLI 包：npm 包名 `@ttkit/daily-hot-api`（scoped），bin 命令名 `daily-hot-api`，`files` 白名单（`bin/ dist/ views/ .env.example`）、`main: dist/main.js`、`publishConfig.access: public`、`publishConfig.registry: https://registry.npmjs.org/`、`prepublishOnly` 构建，并移除了 `private`。当前已发布 `0.1.2`。非 scoped 的 `daily-hot-api` 与 npm 上已有的 `dailyhotapi` 太相似而无法注册，不要改回；npm 若把首版/新版本放入 staged 队列，需要维护者在 npmjs.com 的 Staged Packages 页面用 2FA 审批。发布推荐 Trusted Publishing：`.github/workflows/publish.yml` 通过 GitHub Actions OIDC 发布（npm 包设置里的 Trusted Publisher 填写 `HelTi` / `daily-hot-api` / `publish.yml`，Allowed actions 勾选 `npm publish`），本地 token 发布仍可用。CLI 文档在 `docs/guide/cli.md`。
+`package.json` 已配置为可发布的 CLI 包：npm 包名 `@ttkit/daily-hot-api`（scoped），bin 命令名 `daily-hot-api`，`files` 白名单（`bin/ dist/ views/ .env.example`）、`main: dist/main.js`、`publishConfig.access: public`、`publishConfig.registry: https://registry.npmjs.org/`、`prepublishOnly` 构建，并移除了 `private`。当前已发布 `0.1.3`。非 scoped 的 `daily-hot-api` 与 npm 上已有的 `dailyhotapi` 太相似而无法注册，不要改回；npm 若把首版/新版本放入 staged 队列，需要维护者在 npmjs.com 的 Staged Packages 页面用 2FA 审批。发布推荐 Trusted Publishing：`.github/workflows/publish.yml` 通过 GitHub Actions OIDC 发布（npm 包设置里的 Trusted Publisher 填写 `HelTi` / `daily-hot-api` / `publish.yml`，Allowed actions 勾选 `npm publish`），本地 token 发布仍可用。CLI 文档在 `docs/guide/cli.md`。
 
 代码结构：
 
@@ -92,13 +92,15 @@ src/cli/commands/          start / stop / status / restart / logs
 
 - `daily-hot-api`（无参数）等价 `start`，在前台就地复用 `bootstrap()` 启动 Nest 应用；`start -d` 通过 `bin/daily-hot-api.js` 派生 detached 子进程，父进程轮询状态文件与 `/health`（最多 60 秒）后退出。
 - `stop/status/restart` 依赖状态目录（默认 `~/.daily-hot-api`，`DAILY_HOT_API_HOME` / `--home` 可覆盖）中的 `daily-hot-api.json`；`logs` 只读 `<home>/logs/daily-hot-api.log`，不依赖状态文件。
-- PID 通过 `ps` 校验是否仍是 daily-hot-api 进程，避免 PID 复用误杀；PS 不可用（Windows、受限沙箱）时退化为「存活即信任」。PID 存活但确认不属于本服务时，`stop` 会保留状态文件并提示用 `--force`，`status` 也保留状态文件；只有进程已退出或状态文件损坏时才自动清理。
-- 后台日志写入 `<home>/logs/daily-hot-api.log`；前台模式标准输出到终端，不写日志文件。
-- 配置优先级：`--config` > `DAILY_HOT_API_ENV_FILE` > `<cwd>/.env` > `<home>/.env`；端口优先级：`--port` > `PORT` > 6689。
+- PID 通过 `ps` 校验是否仍是 daily-hot-api 进程，避免 PID 复用误杀。校验只匹配状态文件记录的 `entry` 与包内 `bin/dist` 入口路径（`processLooksLikeService(pid, { entry })`），**不要**把裸包名加回 markers：仓库目录、状态目录、日志路径里都含 `daily-hot-api`，任何在这些路径上工作的进程都会被误判。PS 不可用（Windows、受限沙箱）时退化为「存活即信任」。PID 存活但确认不属于本服务时，`stop` 会保留状态文件并提示用 `--force`，`status` 也保留状态文件；只有进程已退出或状态文件损坏时才自动清理。
+- `restart` 在旧实例停止失败时直接中止，不会继续启动新进程。
+- 后台日志写入 `<home>/logs/daily-hot-api.log`；前台模式标准输出到终端，不写日志文件。日志超过 10 MB 时在下一次 `start -d` 打开日志前轮转为 `.log.1` ~ `.log.3`（后台进程继承 fd，运行期间换不了文件）；`logs --clear` 原地清空。
+- 配置优先级：`--config` > `DAILY_HOT_API_ENV_FILE` > `<cwd>/.env` > `<home>/.env`；端口优先级：`--port` > `PORT` > 6689；监听地址优先级：`--host` > `HOST` > 0.0.0.0。绑定到具体地址时，端口检查和 `/health` 探测都要用 `probeHost()` 换算出的地址，否则会假阴性。
 - 不要使用 `--env-file`：Node.js 24 会抢先解析该参数（即使位于脚本路径之后），文件不存在时直接以退出码 9 失败。帮助和文档统一使用 `--config`，args 解析器保留 `--env-file` 作为兼容别名。
-- `src/main.ts` 导出 `bootstrap()` 与 `resolveViewsDir()`，仅在 `require.main === module` 时自动启动，供 CLI 复用；模板目录优先从包根目录 `views/` 解析，兼容全局安装后在任意 cwd 运行，`cwd/views` 作为兜底。
+- `/health` 判定不只看状态码：`checkHealth` 会校验响应体形状（`status` + `checks`），避免端口被其他服务占用时误判健康。
+- `src/main.ts` 导出 `bootstrap()` 与 `resolveViewsDir()`，仅在 `require.main === module` 时自动启动，供 CLI 复用；`app.listen(port, host)` 的 host 来自 `HOST`；模板目录优先从包根目录 `views/` 解析，兼容全局安装后在任意 cwd 运行，`cwd/views` 作为兜底。
 - 退出码：`0` 成功、`1` 运行错误、`2` 用法错误、`3` status 未运行。
-- 发布前：`npm run build`、`npm run pack:check`，确认 tarball 不含 `.env`、docs 缓存或测试文件；`prepublishOnly` 会自动构建。CLI 测试在 `src/cli/*.spec.ts`。
+- 发布前：`npm run build`、`npm run pack:check`，确认 tarball 不含 `.env`、docs 缓存或测试文件；`prepublishOnly` 会自动构建。CLI 单元测试在 `src/cli/*.spec.ts`，真实生命周期冒烟测试在 `test/cli/lifecycle-smoke.mjs`（`npm run test:cli`，用临时状态目录和空闲端口，CI 会跑）。
 
 ## Agent Skill（skills/daily-hot-api）
 
@@ -120,13 +122,20 @@ evals/daily-hot-api/       # 触发评测集 + run-trigger-eval.mjs（catalog/cl
 约定：
 
 - skill 声明最低兼容 CLI 版本（`scripts/lib/cli.mjs` 的 `CLI_PIN` + `SKILL.md` metadata）：本地 CLI >= 该版本时复用，否则 npx 使用该精确版本，禁止 `@latest`；CLI 发版后 1 周内评估更新 pin、`compatibility`、references，并跑测试。
+- 启动标记 `.started-by-skill` 的生命周期是正确性要点：在 CLI 确认进程已起来之后、健康检查之前写入；只有 CLI `stop` 返回 0 才删除。健康检查失败或 `stop` 失败都必须保留标记，否则实例再也停不掉。
+- 实例探测先用标记里的 `baseUrl` 打 `/health`（命中就不 spawn CLI），`detectCli()` 结果在进程内缓存；`ensure` 发现旧的 skill 实例不健康时会先 stop 再起新的。
+- 自动启动的实例写 `HOST=127.0.0.1`。`HOST` 由 CLI 0.1.3 引入，而 `CLI_PIN` 仍固定 0.1.2（发布与 pin 升级必须分两步，见下一条），此时该变量被 zod 丢弃：不报错，但实例仍监听所有网卡。
+- **`CLI_PIN` 的升级时机**：只有在 `npm view @ttkit/daily-hot-api version` 确认新版本真正可安装之后才改（npm 可能把新版本放进 staged 队列，需要 2FA 审批）。提前改会让 skill 去 npx 一个不存在的版本，所有用户直接失败。要改的位置和发布后清单见 `docs/guide/cli.md` 的「发布后：同步 Agent Skill 的 CLI 固定版本」。
+- `--param` 的 key 允许字母开头的字母/数字/`_`/`-`（含驼峰，如 `pageSize`，服务端 DTO 有这个字段）；所有用法校验都要在 `ensureService()` 之前完成，别让用法错误先等一次 npx 下载。
 - 只读原则：skill 不调用 `POST /api/briefs/generate`、`DELETE`、`scheduler/*` 写接口；`stop` 只停自己启动的实例。
 - 自动启动的隔离实例使用最小配置（不开简报、不连 Mongo，状态目录 `~/.daily-hot-api-skill`），不读取用户 cwd `.env`。
 - 退出码与 CLI 不同：skill 用 `0/2/3/4/5`（5=未运行，CLI 的 3=未运行），改脚本时同步 `references/api.md` 与 `SKILL.md`。
 - frontmatter 只写 `name/description/license/compatibility/metadata`（不要加自定义顶层字段）；`name` 必须与目录名一致。
 - 修改 API 行为、热榜来源或 CLI 选项时，同步更新 `references/`、`docs/guide/agent-skill.md`、`docs/development/agent-skill.md` 和相关测试。
+- `description` 不要写死来源数量（加来源就会失真，而改 description 必须重跑触发评测），用「60+」。
 - 修改 `description` 后必须重跑触发评测：`node evals/daily-hot-api/run-trigger-eval.mjs --dry-run`（CI）；发布前用 catalog + 至少一个真实宿主各跑一次并达到阈值。
-- 验证：`node --test test/skill/*.test.mjs`、`node evals/daily-hot-api/run-trigger-eval.mjs --dry-run`、`agentskills validate skills/daily-hot-api`、`npx -y skills@1.7.4 add . --list`。
+- 新增/删除热榜来源要同步 `skills/daily-hot-api/references/sources.md`，skill CI 会对比来源注册表与该文档，不一致直接失败。
+- 验证：`npm run test:skill`（等价 `node --test test/skill/*.test.mjs`）、`node evals/daily-hot-api/run-trigger-eval.mjs --dry-run`、`agentskills validate skills/daily-hot-api`、`npx -y skills@1.7.4 add . --list`。
 
 ## Configuration
 
@@ -137,6 +146,8 @@ When adding a new environment variable, update:
 - `src/config/validation.schema.ts`
 - `.env.example`
 - `docs/reference/environment-variables.md`
+
+`PORT` 和 `HOST` 还要同步 CLI 侧：`src/cli/paths.ts` 的默认值常量、`src/cli/env.ts` 的解析函数、`src/cli/help.ts` 和 `docs/guide/cli.md`。
 
 Daily brief code must not call `ConfigService` directly. Read settings through `DailyBriefConfigService` (`src/daily-brief/daily-brief.config.ts`), which uses `getOrThrow` so defaults live only in `validation.schema.ts`. When adding a daily brief variable, add a typed getter there too.
 
@@ -329,6 +340,7 @@ For CLI / npm packaging changes:
 npm run build
 npx eslint "src/**/*.ts"
 npm test
+npm run test:cli
 node bin/daily-hot-api.js --help
 npm run pack:check
 ```

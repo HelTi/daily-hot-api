@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'fs';
 import * as dotenv from 'dotenv';
 import { CliError } from './errors';
-import { DEFAULT_PORT } from './paths';
+import { DEFAULT_HOST, DEFAULT_PORT } from './paths';
 
 /**
  * 把 .env 文件合并进给定的 env 对象。
@@ -62,4 +62,23 @@ export function resolvePort(
     throw new CliError(`环境变量 PORT 配置无效: "${raw}"，应为 1-65535 的整数`);
   }
   return port;
+}
+
+/**
+ * 监听地址优先级：--host > 环境变量 HOST（含 .env）> 默认 0.0.0.0。
+ */
+export function resolveHost(
+  flagHost: string | undefined,
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  const flag = flagHost?.trim();
+  if (flag) {
+    return flag;
+  }
+
+  const raw = (env.HOST ?? '').trim();
+  if (!raw) {
+    return DEFAULT_HOST;
+  }
+  return raw;
 }

@@ -45,6 +45,18 @@ node scripts/daily-hot.mjs brief latest --full
 
 没有简报时返回 `{ "found": false, "message": "..." }`。
 
+`status` 不是 `success` 时（`generating` / `failed`）会多出一个 `note` 字段：
+
+```json
+{
+  "found": true,
+  "status": "generating",
+  "note": "这份简报正在生成中，内容可能不完整；稍后重新读取。"
+}
+```
+
+这种情况要把 `note` 如实转达给用户，不要把残缺内容当成当天的简报；重新生成要由用户自己发起（本 skill 不调用 `POST /api/briefs/generate`）。
+
 ## 只读接口
 
 ```http

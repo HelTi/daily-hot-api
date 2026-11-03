@@ -3,8 +3,8 @@ import { stat } from 'fs/promises';
 import type { CliOptions } from '../args';
 import type { CommandContext } from '../context';
 import { EXIT_CODES } from '../errors';
-import { readLogChunk, tailFile } from '../log-file';
-import { fail, progress } from '../output';
+import { clearLogFile, readLogChunk, tailFile } from '../log-file';
+import { fail, info, progress } from '../output';
 import { buildCliPaths, resolveHomeDir } from '../paths';
 
 const FOLLOW_INTERVAL_MS = 500;
@@ -24,6 +24,12 @@ export async function logsCommand(
       '前台模式的标准输出直接打印在启动终端，不会写入日志文件；请使用 daily-hot-api start -d 后台启动',
     );
     return EXIT_CODES.error;
+  }
+
+  if (options.clear) {
+    clearLogFile(paths.logFile);
+    info(`已清空日志: ${paths.logFile}`);
+    return EXIT_CODES.ok;
   }
 
   const content = tailFile(paths.logFile, options.lines);
