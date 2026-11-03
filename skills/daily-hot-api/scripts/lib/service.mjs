@@ -148,6 +148,9 @@ async function writeSkillConfig(paths, port) {
     '# 由 daily-hot-api agent skill 自动生成，请勿手改。',
     '# 这是隔离的最小配置：不读取用户 .env，不启用简报，不连接用户 Mongo。',
     `PORT=${port}`,
+    '# 只绑定回环地址：隔离实例不需要暴露到局域网。',
+    '# 需要 CLI >= 0.1.3；旧版本会忽略这个变量（仍监听所有网卡）。',
+    'HOST=127.0.0.1',
     'BRIEF_ENABLED=false',
     'SCHEDULER_AUTO_START=false',
     '# 故意指向不可达地址，避免误连用户本机 MongoDB 里的历史数据。',
@@ -198,6 +201,27 @@ export async function inspectService(options = {}) {
   }
 
   const home = resolveSkillHome();
+
+  // 先用 marker 里记录的地址直接探 /health：命中就省掉一次 CLI 子进程
+  // （detectCli 的版本探测 + `status --json`），这是最常走的路径。
+  const marker = await readMarker(home);
+  if (marker?.baseUrl) {
+    const baseUrl = normalizeBaseUrl(marker.baseUrl);
+    const health = await getHealth(baseUrl);
+    if (health.ok) {
+      return {
+        found: true,
+        source: 'skill',
+        baseUrl,
+        readOnly: false,
+        health,
+        ready: await getReady(baseUrl),
+        cliVersion: marker.cliVersion,
+        port: marker.port,
+      };
+    }
+  }
+
   const skillStatus = await readSkillServiceStatus(home);
   if (skillStatus) {
     const baseUrl = normalizeBaseUrl(skillStatus.url);
@@ -274,12 +298,15 @@ async function startIsolatedService() {
   const home = resolveSkillHome();
   const paths = buildSkillPaths(home);
 
-  // 上次 skill 启动但进程已退出：清掉 stale marker，CLI 会在 start 时清理状态文件。
+  // 上次 skill 启动的实例已经不健康（inspectService 探不到），但进程可能还在。
+  // 先停掉它再起新的，避免越积越多的僵尸实例；失败也继续，由 CLI 的
+  // 状态文件校验兜底。
   if (await fileExists(paths.markerFile)) {
-    const marker = await readJsonFile(paths.markerFile);
-    if (marker) {
-      await rm(paths.markerFile, { force: true });
-    }
+    await runCli(['stop', '--json', '--home', home], {
+      timeoutMs: 30_000,
+      tolerateFailure: true,
+    });
+    await rm(paths.markerFile, { force: true });
   }
 
   const port = await choosePort();
@@ -315,10 +342,21 @@ async function startIsolatedService() {
   }
 
   const baseUrl = `http://127.0.0.1:${port}`;
+
+  // CLI 已经确认进程起来了，marker 必须在健康检查之前写：
+  // 否则健康检查失败就留下一个「本 skill 启动但没有标记」的孤儿实例，
+  // 之后 stop 会以为没东西要停。
+  await writeMarker(paths, {
+    port,
+    baseUrl,
+    startedAt: new Date().toISOString(),
+    cliVersion: result.cli.version ?? CLI_PIN,
+  });
+
   const health = await waitForHealthy(baseUrl);
   if (!health.ok) {
     throw serviceError(
-      '服务进程已启动，但 /health 不可达。请查看日志排查。',
+      '服务进程已启动，但 /health 不可达。请查看日志排查，确认后可执行 stop 停止该实例。',
       {
         baseUrl,
         home,
@@ -327,13 +365,6 @@ async function startIsolatedService() {
       },
     );
   }
-
-  await writeMarker(paths, {
-    port,
-    baseUrl,
-    startedAt: new Date().toISOString(),
-    cliVersion: result.cli.version ?? CLI_PIN,
-  });
 
   return {
     found: true,
@@ -370,16 +401,22 @@ export async function stopSkillService() {
   });
   const parsed = parseJsonOutput(result.stdout);
 
-  await rm(paths.markerFile, { force: true });
-
   if (result.code !== 0) {
-    throw serviceError('停止服务失败。', {
-      home,
-      stdout: result.stdout.trim(),
-      stderr: result.stderr.trim(),
-      exitCode: result.code,
-    });
+    // 保留 marker：实例可能还在跑，删掉标记就等于再也停不掉它。
+    throw serviceError(
+      '停止服务失败，实例可能仍在运行。标记文件已保留，可重试 stop；' +
+        '若 CLI 提示无法确认 PID，按它给的命令手动处理。',
+      {
+        home,
+        markerFile: paths.markerFile,
+        stdout: result.stdout.trim(),
+        stderr: result.stderr.trim(),
+        exitCode: result.code,
+      },
+    );
   }
+
+  await rm(paths.markerFile, { force: true });
 
   return {
     stopped: true,
@@ -388,6 +425,6 @@ export async function stopSkillService() {
   };
 }
 
-export async function readMarker() {
-  return readJsonFile(buildSkillPaths().markerFile);
+export async function readMarker(home = resolveSkillHome()) {
+  return readJsonFile(buildSkillPaths(home).markerFile);
 }

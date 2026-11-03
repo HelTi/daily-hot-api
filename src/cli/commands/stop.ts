@@ -2,12 +2,7 @@ import type { CliOptions } from '../args';
 import type { CommandContext } from '../context';
 import { CliError, EXIT_CODES } from '../errors';
 import { info, progress, warn } from '../output';
-import {
-  APP_NAME,
-  buildCliPaths,
-  getPackageRoot,
-  resolveHomeDir,
-} from '../paths';
+import { APP_NAME, buildCliPaths, resolveHomeDir } from '../paths';
 import {
   clearRunState,
   isProcessAlive,
@@ -80,7 +75,7 @@ export async function stopService(
     };
   }
 
-  const trusted = processLooksLikeService(state.pid, getPackageRoot());
+  const trusted = processLooksLikeService(state.pid, { entry: state.entry });
   if (!trusted && !options.force) {
     // 保留状态文件，方便用户重试 `stop --force`；不要对来历不明的进程发信号。
     return {

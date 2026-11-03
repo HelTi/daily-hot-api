@@ -1,6 +1,11 @@
 import { createServer, type Server } from 'http';
 import { AddressInfo } from 'net';
-import { checkHealth, waitForHealthy } from './health';
+import { checkHealth, looksLikeHealthBody } from './health';
+
+const HEALTH_BODY = JSON.stringify({
+  status: 'ok',
+  checks: { redis: true, memory: { used: 1, total: 2 } },
+});
 
 function listen(server: Server): Promise<number> {
   return new Promise((resolve) => {
@@ -17,11 +22,11 @@ function close(server: Server): Promise<void> {
 }
 
 describe('health', () => {
-  it('GET /health 返回 2xx 时判定为健康', async () => {
+  it('GET /health 返回本服务的响应体时判定为健康', async () => {
     const server = createServer((request, response) => {
       if (request.url === '/health') {
         response.writeHead(200, { 'Content-Type': 'application/json' });
-        response.end('{"status":"ok"}');
+        response.end(HEALTH_BODY);
         return;
       }
       response.writeHead(404);
@@ -30,7 +35,6 @@ describe('health', () => {
     const port = await listen(server);
     try {
       expect(await checkHealth(port)).toBe(true);
-      expect(await waitForHealthy(port, 2000)).toBe(true);
     } finally {
       await close(server);
     }
@@ -41,10 +45,9 @@ describe('health', () => {
     const port = await listen(server);
     await close(server);
     expect(await checkHealth(port, 300)).toBe(false);
-    expect(await waitForHealthy(port, 300)).toBe(false);
   });
 
-  it('非 2xx/3xx 响应判定为不健康', async () => {
+  it('非 2xx 响应判定为不健康', async () => {
     const server = createServer((request, response) => {
       response.writeHead(500);
       response.end();
@@ -55,5 +58,26 @@ describe('health', () => {
     } finally {
       await close(server);
     }
+  });
+
+  it('端口被其他服务占用时不判定为健康', async () => {
+    const server = createServer((request, response) => {
+      response.writeHead(200, { 'Content-Type': 'text/html' });
+      response.end('<html>another app</html>');
+    });
+    const port = await listen(server);
+    try {
+      expect(await checkHealth(port)).toBe(false);
+    } finally {
+      await close(server);
+    }
+  });
+
+  it('looksLikeHealthBody 只接受带 status 与 checks 的 JSON', () => {
+    expect(looksLikeHealthBody(HEALTH_BODY)).toBe(true);
+    expect(looksLikeHealthBody('{"status":"ok"}')).toBe(false);
+    expect(looksLikeHealthBody('{"checks":{}}')).toBe(false);
+    expect(looksLikeHealthBody('not json')).toBe(false);
+    expect(looksLikeHealthBody('null')).toBe(false);
   });
 });

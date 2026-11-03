@@ -1,11 +1,11 @@
 ---
 name: daily-hot-api
-description: Fetch real-time trending/hot lists from 64 Chinese and global platforms (Weibo 微博热搜, Zhihu 知乎热榜, Bilibili, Baidu, Douyin 抖音, Toutiao, Hacker News, GitHub, 财联社, 同花顺, etc.), search saved hot-item history, and read AI daily briefs through a local or self-hosted daily-hot-api service. Use when the user asks about 热搜/热榜/今日热点/舆情/趋势/榜单, what is trending on a Chinese platform, wants a cross-platform digest, or asks for a daily brief. Do not use for fetching full article text, scraping arbitrary URLs, or general web news without a hot-list source.
+description: Fetch real-time trending/hot lists from 60+ Chinese and global platforms (Weibo 微博热搜, Zhihu 知乎热榜, Bilibili, Baidu, Douyin 抖音, Toutiao, Hacker News, GitHub, 财联社, 同花顺, etc.), search saved hot-item history, and read AI daily briefs through a local or self-hosted daily-hot-api service. Use when the user asks about 热搜/热榜/今日热点/舆情/趋势/榜单, what is trending on a Chinese platform, wants a cross-platform digest, or asks for a daily brief. Do not use for fetching full article text, scraping arbitrary URLs, or general web news without a hot-list source.
 license: MIT
 compatibility: Requires Node.js >= 22.20 and npx; npm registry and hot-list upstream sites must be reachable. First run downloads @ttkit/daily-hot-api (~1 MB) and starts a local service. Tested on Node 22.23.2 and 24.x; the CLI package itself declares >= 24.
 metadata:
   author: Helti
-  version: "1.0.0"
+  version: "1.1.0"
   homepage: https://helti.github.io/daily-hot-api/
   repository: https://github.com/HelTi/daily-hot-api
   cli-version: "0.1.2"
@@ -71,7 +71,7 @@ node scripts/daily-hot.mjs hot zhihu --limit 10
 3. `http://127.0.0.1:6689`：用户自己用 CLI 启动的实例（只读，**绝不 stop**）。
 4. 都没有时自动启动隔离实例：最小配置、随机/默认端口、不连接 Mongo、不开简报。
 
-隔离实例的状态目录可用 `DAILY_HOT_API_SKILL_HOME` 覆盖。`stop` 只会停止带本 skill 启动标记的实例。
+隔离实例的状态目录可用 `DAILY_HOT_API_SKILL_HOME` 覆盖。`stop` 只会停止带本 skill 启动标记的实例；停止失败时标记会保留，可以重试 `stop`。
 
 ## 常用命令
 
@@ -82,6 +82,9 @@ node scripts/daily-hot.mjs sources
 # 指定来源、条数、榜单类型；--no-cache 慎用
 node scripts/daily-hot.mjs hot weibo --limit 20
 node scripts/daily-hot.mjs hot baidu --type hot
+
+# 来源专属参数（key 支持驼峰）
+node scripts/daily-hot.mjs hot hupu --param page=2 --param pageSize=10
 
 # 历史检索（需要 Mongo；隔离实例不可用，需连接自建实例）
 node scripts/daily-hot.mjs history search --source zhihu --keyword AI \
@@ -105,12 +108,13 @@ node scripts/daily-hot.mjs stop
 - 跨平台对比时按来源分组，注明每个来源的抓取时间（`updatedAt` / `fromCache`）。
 - 数据是热榜快照，会缓存；需要最新数据时可用 `--no-cache`，但同一来源不要连续刷新。
 - 只根据脚本返回的数据回答，不要补造标题、热度或链接。
+- 简报返回 `note` 字段时（`generating` / `failed`）说明内容不完整，要如实告诉用户，不要当成完整简报。
 
 ## 安全与成本边界
 
 - 不要打印、读取 `.env`、API Key、`~/.daily-hot-api-skill` 下的状态文件内容。
 - 不要调用 `POST /api/briefs/generate` 或任何 `scheduler/*` 写接口；本 skill 只读。生成简报会消耗 AI 配额，必须由用户显式发起。
-- 自动启动的实例当前监听所有网卡（服务端未提供 host 配置），但配置里没有 AI Key、没有 Mongo 连接，只暴露公开热榜数据；不要用带 AI Key 的 `.env` 给 skill 启动实例。
+- 自动启动的实例配置里写了 `HOST=127.0.0.1`：CLI >= 0.1.3 只绑定回环地址。本 skill 当前固定 CLI `0.1.2`（见 frontmatter `cli-version`），该版本会忽略这个变量，所以**实际仍监听所有网卡**。两种情况下配置里都没有 AI Key、没有 Mongo 连接，只暴露公开热榜数据。不要用带 AI Key 的 `.env` 给 skill 启动实例。
 - 单次请求最多查 3 个来源；不要循环 `--no-cache` 刷上游导致被限流。
 - 上游来源可能临时失败：如实告诉用户哪个来源失败，可换同类来源重试一次。
 

@@ -3,15 +3,11 @@ import type { CommandContext } from '../context';
 import { EXIT_CODES } from '../errors';
 import { checkHealth } from '../health';
 import { field, formatDuration, info } from '../output';
-import {
-  buildCliPaths,
-  getPackageRoot,
-  resolveHomeDir,
-  type CliPaths,
-} from '../paths';
+import { buildCliPaths, resolveHomeDir, type CliPaths } from '../paths';
 import {
   clearRunState,
   isProcessAlive,
+  probeHost,
   processLooksLikeService,
   readRunState,
 } from '../run-state';
@@ -45,7 +41,7 @@ export async function statusCommand(
     );
   }
 
-  if (!processLooksLikeService(state.pid, getPackageRoot())) {
+  if (!processLooksLikeService(state.pid, { entry: state.entry })) {
     // PID 仍存活但不属于本服务：保留状态文件，允许用户用 `stop --force` 处理。
     return reportNotRunning(
       options.json,
@@ -54,12 +50,12 @@ export async function statusCommand(
     );
   }
 
-  const health = await checkHealth(state.port);
+  const health = await checkHealth(state.port, 2000, state.host);
   const startedAtMs = Date.parse(state.startedAt);
   const uptimeSeconds = Number.isFinite(startedAtMs)
     ? Math.max(0, Math.floor((Date.now() - startedAtMs) / 1000))
     : 0;
-  const url = `http://localhost:${state.port}`;
+  const url = `http://${probeHost(state.host)}:${state.port}`;
 
   if (options.json) {
     console.log(
@@ -68,6 +64,7 @@ export async function statusCommand(
           running: true,
           pid: state.pid,
           port: state.port,
+          host: state.host || '0.0.0.0',
           url,
           mode: state.mode,
           startedAt: state.startedAt,
@@ -87,7 +84,7 @@ export async function statusCommand(
 
   info('热点服务运行中');
   field('PID', state.pid);
-  field('端口', state.port);
+  field('监听', `${state.host || '0.0.0.0'}:${state.port}`);
   field('地址', url);
   field(
     '模式',

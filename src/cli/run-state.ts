@@ -8,7 +8,7 @@ import {
   writeFileSync,
 } from 'fs';
 import { connect } from 'net';
-import { dirname } from 'path';
+import { dirname, join } from 'path';
 import { APP_NAME, getPackageRoot } from './paths';
 
 export type RunMode = 'foreground' | 'daemon';
@@ -17,6 +17,8 @@ export type RunMode = 'foreground' | 'daemon';
 export interface RunState {
   pid: number;
   port: number;
+  /** 实际监听地址（HOST / --host）；空字符串表示旧状态文件，按 0.0.0.0 处理。 */
+  host: string;
   mode: RunMode;
   startedAt: string;
   cwd: string;
@@ -59,6 +61,7 @@ export function parseRunState(raw: unknown): RunState | null {
   return {
     pid,
     port,
+    host: typeof value.host === 'string' ? value.host : '',
     mode: value.mode,
     startedAt: value.startedAt,
     cwd: typeof value.cwd === 'string' ? value.cwd : '',
@@ -133,12 +136,14 @@ export function isProcessAlive(pid: number): boolean {
 /**
  * 尽量确认 pid 仍是 daily-hot-api 进程。
  *
- * 通过 ps 查看命令行，命中包目录名或 dist 入口则认为匹配；
+ * 通过 ps 查看命令行，命中「状态文件记录的入口」或本包的 bin/dist 入口路径才算匹配。
+ * 不要只匹配包名：仓库目录、状态目录和日志路径里都含 daily-hot-api，
+ * 任何在这些路径上工作的无关进程都会被误判，PID 复用时会被误杀。
  * Windows 或 ps 不可用时退回「存活即可」，避免误杀保护导致 stop 失效。
  */
 export function processLooksLikeService(
   pid: number,
-  packageRoot: string = getPackageRoot(),
+  options: { entry?: string; packageRoot?: string } = {},
 ): boolean {
   if (!isProcessAlive(pid)) {
     return false;
@@ -154,12 +159,18 @@ export function processLooksLikeService(
   if (!commandLine) {
     return true;
   }
+  const packageRoot = options.packageRoot ?? getPackageRoot();
   const markers = [
-    APP_NAME,
-    `${packageRoot}/dist/main.js`,
-    `${packageRoot}/dist/cli/index.js`,
-    `${packageRoot}\\dist\\main.js`,
-  ];
+    // 状态文件记录的绝对入口最精确。
+    options.entry,
+    join(packageRoot, 'bin', `${APP_NAME}.js`),
+    join(packageRoot, 'dist', 'main.js'),
+    join(packageRoot, 'dist', 'cli', 'index.js'),
+    // 换一个安装位置执行 stop（npx 缓存目录不同）或用相对路径启动时的兜底，
+    // 仍然要求包名出现在 bin 入口路径里，而不是命令行任意位置。
+    `bin/${APP_NAME}.js`,
+    `bin\\${APP_NAME}.js`,
+  ].filter((marker): marker is string => Boolean(marker));
   return markers.some((marker) => commandLine.includes(marker));
 }
 
@@ -182,6 +193,20 @@ export async function waitForProcessExit(
     await sleep(intervalMs);
   }
   return !isProcessAlive(pid);
+}
+
+/**
+ * 把监听地址换成可探测的连接地址。
+ *
+ * 0.0.0.0 / :: / 空值代表「所有网卡」，连回环即可；
+ * 绑定到具体地址时必须连那个地址，否则端口探测和健康检查都会假阴性。
+ */
+export function probeHost(host: string | undefined): string {
+  const value = (host ?? '').trim();
+  if (!value || value === '0.0.0.0' || value === '::' || value === '*') {
+    return '127.0.0.1';
+  }
+  return value;
 }
 
 /** 检查端口是否有进程在监听（默认只探测本机回环地址）。 */

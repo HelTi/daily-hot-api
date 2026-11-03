@@ -48,6 +48,22 @@ describe('parseArgs', () => {
     expect(options.command).toBe('logs');
     expect(options.lines).toBe(120);
     expect(options.follow).toBe(true);
+    expect(options.clear).toBe(false);
+  });
+
+  it('解析 logs --clear', () => {
+    expect(parseArgs(['logs', '--clear']).clear).toBe(true);
+    expect(() => parseArgs(['logs', '--clear', '-f'])).toThrow(UsageError);
+  });
+
+  it('解析 start/restart 的 --host', () => {
+    expect(parseArgs(['start', '--host', '127.0.0.1']).host).toBe('127.0.0.1');
+    expect(parseArgs(['restart', '--host=0.0.0.0']).host).toBe('0.0.0.0');
+    expect(parseArgs([]).host).toBeUndefined();
+    expect(() => parseArgs(['logs', '--host', '127.0.0.1'])).toThrow(
+      UsageError,
+    );
+    expect(() => parseArgs(['start', '--host', ' '])).toThrow(UsageError);
   });
 
   it('解析 help 子命令目标', () => {
@@ -109,6 +125,8 @@ describe('parseArgs', () => {
   });
 
   it('帮助文本列出命令支持的选项', () => {
+    expect(supportedOptions('start')).toContain('--host');
+    expect(supportedOptions('logs')).toContain('--clear');
     expect(supportedOptions('start')).toContain('--daemon');
     expect(supportedOptions('stop')).toContain('--timeout');
     expect(supportedOptions('status')).toContain('--json');

@@ -54,6 +54,11 @@ daily-hot-api --config /etc/daily-hot-api/prod.env
 ```
 
 端口优先级：`--port` > 配置文件/环境变量 `PORT` > `6689`。
+监听地址优先级：`--host` > 配置文件/环境变量 `HOST` > `0.0.0.0`。
+
+::: tip 只给本机用就绑定回环地址
+默认 `0.0.0.0` 会监听所有网卡，局域网内任何机器都能访问。本机开发或只通过反向代理暴露时，建议设 `HOST=127.0.0.1`（或 `--host 127.0.0.1`）。
+:::
 
 ::: warning 不要使用 `--env-file`
 `--env-file` 是 Node.js 自身的命令行参数。Node 会抢先解析它，文件不存在时直接以退出码 9 失败，CLI 来不及给出友好提示。请统一使用 `--config`。
@@ -71,6 +76,9 @@ daily-hot-api
 
 # 指定端口和配置文件
 daily-hot-api -p 6699 --config ./prod.env
+
+# 只监听回环地址
+daily-hot-api -p 6699 --host 127.0.0.1
 ```
 
 ### 后台启动
@@ -80,12 +88,13 @@ daily-hot-api -p 6699 --config ./prod.env
 ```bash
 daily-hot-api start -d
 daily-hot-api start -d --port 6699 --config ./prod.env
+daily-hot-api start -d --host 127.0.0.1
 ```
 
 成功后输出后台进程 PID、日志文件位置和停止命令：
 
 ```text
-[daily-hot-api] 热点服务已在后台启动: http://localhost:6699
+[daily-hot-api] 热点服务已在后台启动: http://127.0.0.1:6699（监听 0.0.0.0）
   PID: 51234
   日志: /Users/you/.daily-hot-api/logs/daily-hot-api.log
 ```
@@ -101,8 +110,8 @@ daily-hot-api status
 ```text
 [daily-hot-api] 热点服务运行中
   PID: 51234
-  端口: 6699
-  地址: http://localhost:6699
+  监听: 0.0.0.0:6699
+  地址: http://127.0.0.1:6699
   模式: 后台 (daemon)
   启动时间: 2026-10-31T04:10:00.305Z（已运行 2 分钟）
   健康检查: ok
@@ -140,7 +149,7 @@ daily-hot-api stop --force
 daily-hot-api stop --json
 ```
 
-停止前 CLI 会尽量用 `ps` 校验 PID 是否仍属于 `daily-hot-api`，避免系统复用 PID 后误杀其他进程。如果 PID 存活但无法确认属于本服务，CLI 会跳过停止并保留状态文件，此时可执行 `daily-hot-api stop --force` 强制终止并清理状态。在无法读取进程信息的环境（例如受限沙箱、部分 Windows 环境）会退化为按状态文件记录的 PID 执行。
+停止前 CLI 会尽量用 `ps` 校验 PID 是否仍属于 `daily-hot-api`，避免系统复用 PID 后误杀其他进程。校验只认状态文件里记录的启动入口和本包的 `bin` / `dist` 入口路径，不会因为命令行里出现 `daily-hot-api` 字样（仓库目录、状态目录、日志路径都含这个名字）就误判。如果 PID 存活但无法确认属于本服务，CLI 会跳过停止并保留状态文件，此时可执行 `daily-hot-api stop --force` 强制终止并清理状态。在无法读取进程信息的环境（例如受限沙箱、部分 Windows 环境）会退化为按状态文件记录的 PID 执行。
 
 ## 重启服务
 
@@ -154,11 +163,11 @@ daily-hot-api restart -d
 # 强制重启为前台模式（命令会占住当前终端）
 daily-hot-api restart --foreground
 
-# 同时换端口/配置文件
-daily-hot-api restart -d --port 6699 --config ./prod.env
+# 同时换端口/监听地址/配置文件
+daily-hot-api restart -d --port 6699 --host 127.0.0.1 --config ./prod.env
 ```
 
-服务未在运行时，`restart` 等价于 `start`。
+服务未在运行时，`restart` 等价于 `start`。旧实例停止失败时（例如 PID 无法确认），`restart` 会直接中止并保留旧实例，不会继续启动新进程。
 
 ## 查看日志
 
@@ -173,9 +182,16 @@ daily-hot-api logs -n 200
 
 # 持续跟踪新增内容，Ctrl+C 退出
 daily-hot-api logs -f
+
+# 清空日志文件（不能与 -f 同用）
+daily-hot-api logs --clear
 ```
 
 前台模式的日志直接打印在启动终端，不会写入日志文件。
+
+### 日志轮转
+
+后台进程直接继承日志文件的 fd，运行期间无法安全地切换文件，因此轮转发生在**每次 `start -d` 打开日志之前**：当前日志超过 10 MB 时顺移为 `daily-hot-api.log.1`，最多保留 3 份（`.1` ~ `.3`），更旧的删除。长时间运行想立刻回收空间用 `logs --clear`（原地清空，不影响后台进程继续写入）。
 
 ## 状态目录
 
@@ -183,9 +199,10 @@ CLI 把运行状态和后台日志保存在状态目录，默认 `~/.daily-hot-a
 
 ```text
 ~/.daily-hot-api/
-  daily-hot-api.json       # PID、端口、模式、启动时间等运行状态
+  daily-hot-api.json       # PID、端口、监听地址、模式、启动时间等运行状态
   logs/
     daily-hot-api.log      # 后台模式日志
+    daily-hot-api.log.1    # 轮转后的历史日志（最多 .1 ~ .3）
 ```
 
 可以用 `DAILY_HOT_API_HOME` 环境变量或 `--home` 指定其他目录。需要同时运行多个实例时，用不同的 `--home` 和端口隔离：
@@ -206,12 +223,14 @@ daily-hot-api --home ~/.daily-hot-api-6699 status
 | `daily-hot-api status` | 查看服务状态；未运行退出码 3 |
 | `daily-hot-api restart` | 重启服务 |
 | `daily-hot-api logs [-f]` | 查看/跟踪后台日志 |
+| `daily-hot-api logs --clear` | 清空后台日志文件 |
 | `daily-hot-api help [命令]` | 查看帮助 |
 | `daily-hot-api --version` | 查看版本 |
 
 | 选项 | 适用命令 | 说明 |
 | --- | --- | --- |
 | `-p, --port <端口>` | start / restart | 覆盖监听端口 |
+| `--host <地址>` | start / restart | 覆盖监听地址，默认 `0.0.0.0` |
 | `-d, --daemon` | start / restart | 后台运行 |
 | `--foreground` | restart | 重启为前台模式 |
 | `--config <路径>` | start / restart | 指定 `.env` 配置文件 |
@@ -221,6 +240,7 @@ daily-hot-api --home ~/.daily-hot-api-6699 status
 | `--json` | status / stop | JSON 输出 |
 | `-n, --lines <行数>` | logs | 显示最后 N 行，默认 50 |
 | `-f, --follow` | logs | 持续跟踪日志 |
+| `--clear` | logs | 清空日志文件（不能与 `-f` 同用） |
 | `-h, --help` | 全部 | 查看帮助 |
 | `-v, --version` | 全部 | 查看版本 |
 
@@ -229,6 +249,7 @@ daily-hot-api --home ~/.daily-hot-api-6699 status
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
 | `PORT` | `6689` | 服务端口；CLI 和服务都会读取，用于启动前端口检查和实际监听 |
+| `HOST` | `0.0.0.0` | 监听地址；CLI 和服务都会读取，端口检查与健康检查也按它选择探测地址 |
 | `DAILY_HOT_API_HOME` | `~/.daily-hot-api` | 运行状态和日志目录 |
 | `DAILY_HOT_API_ENV_FILE` | 空 | 显式指定 `.env` 文件，等价于 `--config` |
 
@@ -255,11 +276,13 @@ CLI 管理的是自己启动的进程（通过状态目录里的 PID），不会
 
 ## 发布到 npm（维护者）
 
-当前已经以 `0.1.2` 发布。发布新版本前先更新版本号，并合并到 `main`：
+当前已经以 `0.1.3` 发布。发布新版本前先更新版本号，并合并到 `main`：
 
 ```bash
 npm version patch|minor|major --no-git-tag-version
 ```
+
+`0.1.3` 的变更：新增 `HOST` / `--host` 监听地址、`logs --clear` 与后台日志轮转，收紧 `stop` 的 PID 校验（只认状态文件记录的入口与包内 `bin`/`dist` 路径），`/health` 判定增加响应体形状校验，`restart` 在旧实例停止失败时中止。
 
 ### 推荐：Trusted Publishing（OIDC，不需要 token）
 
@@ -279,7 +302,7 @@ npm version patch|minor|major --no-git-tag-version
 
 保存后，发布新版本有两种方式：
 
-1. 在 GitHub 创建 Release（发布 tag，例如 `v0.1.2`），触发 `Publish to npm` workflow；
+1. 在 GitHub 创建 Release（发布 tag，例如 `v0.1.3`），触发 `Publish to npm` workflow；
 2. 在 GitHub Actions 页面手动运行 `Publish to npm`（`workflow_dispatch`）。
 
 workflow 依次执行 `npm ci` → `npm run build` → `npm test` → `npm publish --access public`。发布前请确认 `main` 上 `package.json` 的版本已更新，且与 Release tag 对应。
@@ -305,6 +328,27 @@ npm publish --access public
 ```bash
 npx -y @ttkit/daily-hot-api@latest --version
 ```
+
+### 发布后：同步 Agent Skill 的 CLI 固定版本
+
+skill 用 `CLI_PIN` 固定 npx 使用的精确版本，**确认新版本在 npm 上真正可安装之后**再升级（如果被放进 staged 队列，要先完成 2FA 审批），否则 skill 会去 npx 一个还不存在的版本：
+
+```bash
+npm view @ttkit/daily-hot-api version   # 确认已是新版本
+```
+
+然后更新这几处（保持一致）：
+
+| 位置 | 内容 |
+| --- | --- |
+| `skills/daily-hot-api/scripts/lib/cli.mjs` | `CLI_PIN` |
+| `skills/daily-hot-api/SKILL.md` | `metadata.cli-version` |
+| `skills/daily-hot-api/references/troubleshooting.md` | `npx --yes @ttkit/daily-hot-api@<版本>`、`npm i -g` 示例 |
+| `docs/development/agent-skill.md` | CLI 固定版本说明 |
+
+`0.1.3` 还要顺手简化 `HOST` 的过渡说明（`SKILL.md`、`references/api.md`、`docs/guide/agent-skill.md`）：pin 到 0.1.3 之后，隔离实例就是确定只绑定 `127.0.0.1`，不再需要「0.1.2 上会被忽略」这一句。
+
+最后跑一遍 `npm run test:skill` 和 `node evals/daily-hot-api/run-trigger-eval.mjs --dry-run`。
 
 ## 故障排查
 

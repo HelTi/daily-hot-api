@@ -27,13 +27,15 @@ import {
   stopSkillService,
 } from './lib/service.mjs';
 
-const SKILL_VERSION = '1.0.0';
+const SKILL_VERSION = '1.1.0';
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 100;
 const MAX_DESC_CHARS = 160;
 const MAX_BRIEF_MARKDOWN_CHARS = 6_000;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/u;
 const SOURCE_NAME = /^[a-z0-9][a-z0-9-]{0,63}$/u;
+/** 来源专属参数的 key：服务端 DTO 含 pageSize 这类驼峰字段。 */
+const PARAM_KEY = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/u;
 
 const VALUE_OPTIONS = new Set([
   '--base-url',
@@ -99,8 +101,9 @@ function helpText() {
 hot 选项:
   --limit <n>                 条数，1-100，默认 ${DEFAULT_LIMIT}
   --type <name>               部分来源支持的类型
-  --param key=value           来源专属参数，可重复。例如 nytimes: --param area=china；
-                              weatheralarm: --param province=北京；history: --param month=03 --param day=08
+  --param key=value           来源专属参数，可重复（key 支持驼峰，如 pageSize）。
+                              例如 nytimes: --param area=china；weatheralarm: --param province=北京；
+                              hupu: --param page=2 --param pageSize=10
   --no-cache                  跳过缓存（受 NOT_ALLOWED_REFRESH_SOURCE 限制，慎用）
 
 history 选项:
@@ -295,7 +298,13 @@ function normalizeBrief(raw, { full } = {}) {
   }
   const analysis =
     raw.analysis && typeof raw.analysis === 'object' ? raw.analysis : {};
-  return {
+  const markdown =
+    typeof raw.markdown === 'string'
+      ? full
+        ? raw.markdown
+        : truncate(raw.markdown, MAX_BRIEF_MARKDOWN_CHARS)
+      : undefined;
+  const result = {
     found: true,
     briefDate: raw.briefDate,
     period: raw.period,
@@ -307,16 +316,28 @@ function normalizeBrief(raw, { full } = {}) {
     topicCount: Array.isArray(analysis.topics)
       ? analysis.topics.length
       : undefined,
-    markdown: full
-      ? raw.markdown
-      : truncate(raw.markdown, MAX_BRIEF_MARKDOWN_CHARS),
+    markdown,
     model: raw.model,
     tavilyUsed: raw.tavilyUsed,
   };
+  // 简报可能处于 generating/failed：内容不完整，必须让 agent 知道别当成结果。
+  if (raw.status && raw.status !== 'success') {
+    result.note =
+      raw.status === 'generating'
+        ? '这份简报正在生成中，内容可能不完整；稍后重新读取。'
+        : `这份简报状态为 ${raw.status}，内容可能缺失；需要重新生成（由用户自行发起）。`;
+  }
+  return result;
 }
 
+/**
+ * 只在 /ready 明确返回 503 时拦截。
+ *
+ * `status: null` 表示探测本身失败（超时/连接错误），不能据此断言 Mongo 未连接；
+ * 那种情况放过去，让真正的接口错误给出准确原因。
+ */
 function assertMongoReady(service, operation) {
-  if (service.ready && service.ready.ready === false) {
+  if (service.ready?.ready === false && service.ready.status === 503) {
     throw new SkillError(
       `当前实例的 MongoDB 未连接（/ready 503），无法${operation}。实时热榜仍可用；请用 DAILY_HOT_API_BASE_URL 连接一个已配置 MONGODB_URI 的自建实例。`,
       {
@@ -469,12 +490,13 @@ async function commandSources(options) {
   };
 }
 
-async function commandHot(options, positionals) {
-  const source = parseSource(positionals[1]);
-  const limit = parseLimit(options.limit, DEFAULT_LIMIT);
-  const service = await ensureService({ baseUrl: options.baseUrl });
-
-  const query = { limit };
+/**
+ * 组装 /hot-lists/:source 的查询参数。
+ *
+ * 必须在连服务之前调用：用法错误不该让用户先等一次 npx 下载 + 服务启动。
+ */
+function buildHotQuery(options) {
+  const query = { limit: parseLimit(options.limit, DEFAULT_LIMIT) };
   if (options.type) query.type = options.type;
   if (options.noCache) query.noCache = 'true';
 
@@ -486,14 +508,24 @@ async function commandHot(options, positionals) {
     }
     const key = param.slice(0, separator);
     const value = param.slice(separator + 1);
-    if (!/^[a-z][a-z0-9-]*$/u.test(key)) {
-      throw usageError(`--param 的 key 不合法：${key}`);
+    // 服务端的 DTO 里有 pageSize / cursor 这类驼峰参数，不能只允许小写。
+    if (!PARAM_KEY.test(key)) {
+      throw usageError(
+        `--param 的 key 不合法：${key}（只允许字母开头的字母/数字/_/-）`,
+      );
     }
     if (reserved.has(key)) {
       throw usageError(`--param 不能覆盖保留参数：${key}，请用专用选项。`);
     }
     query[key] = value;
   }
+  return query;
+}
+
+async function commandHot(options, positionals) {
+  const source = parseSource(positionals[1]);
+  const query = buildHotQuery(options);
+  const service = await ensureService({ baseUrl: options.baseUrl });
 
   const raw = await requestJson(
     service.baseUrl,
@@ -519,6 +551,7 @@ async function commandHistory(options, positionals) {
   const limit = parseLimit(options.limit, 20);
   const page = parsePage(options.page);
   const query = { page, limit };
+  // 下面这些校验都在 ensureService 之前完成，理由同 buildHotQuery。
   if (options.source) query.source = options.source;
   if (options.keyword) {
     if (options.keyword.length > 100) {
@@ -675,6 +708,8 @@ if (isEntry) {
 }
 
 export {
+  SKILL_VERSION,
+  buildHotQuery,
   dispatch,
   normalizeHot,
   normalizeHistory,

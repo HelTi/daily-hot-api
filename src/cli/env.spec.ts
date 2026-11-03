@@ -1,9 +1,9 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { applyEnvFile, resolvePort } from './env';
+import { applyEnvFile, resolveHost, resolvePort } from './env';
 import { CliError } from './errors';
-import { DEFAULT_PORT } from './paths';
+import { DEFAULT_HOST, DEFAULT_PORT } from './paths';
 
 describe('env', () => {
   const tempDirs: string[] = [];
@@ -62,5 +62,12 @@ describe('env', () => {
     expect(() => resolvePort(undefined, { PORT: 'abc' })).toThrow(CliError);
     expect(() => resolvePort(undefined, { PORT: '0' })).toThrow(CliError);
     expect(() => resolvePort(undefined, { PORT: '65536' })).toThrow(CliError);
+  });
+
+  it('监听地址优先级：参数 > 环境变量 > 默认值', () => {
+    expect(resolveHost(undefined, {})).toBe(DEFAULT_HOST);
+    expect(resolveHost(undefined, { HOST: '127.0.0.1' })).toBe('127.0.0.1');
+    expect(resolveHost(undefined, { HOST: '  ' })).toBe(DEFAULT_HOST);
+    expect(resolveHost('10.0.0.5', { HOST: '127.0.0.1' })).toBe('10.0.0.5');
   });
 });

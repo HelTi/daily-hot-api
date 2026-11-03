@@ -6,6 +6,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
+import { SKILL_VERSION } from '../../skills/daily-hot-api/scripts/daily-hot.mjs';
 import {
   EvalError,
   buildCatalogPrompt,
@@ -152,9 +153,19 @@ test('评测集拒绝非法结构', () => {
 test('读取 SKILL.md 元数据', async () => {
   const skill = await readSkill(SKILL_DIR);
   assert.equal(skill.name, 'daily-hot-api');
-  assert.equal(skill.version, '1.0.0');
+  // 不写死版本号（每次发版都会改），校验格式并和脚本里的常量保持一致。
+  assert.match(skill.version, /^\d+\.\d+\.\d+$/);
+  assert.equal(skill.version, SKILL_VERSION);
   assert.ok(skill.description.includes('热搜'));
   assert.ok(skill.description.includes('Do not use for fetching full article text'));
+});
+
+test('description 不写死来源数量', async () => {
+  const skill = await readSkill(SKILL_DIR);
+  // 来源数量会随新增来源变化，写死会让 description 失真，
+  // 而改 description 必须重跑触发评测。
+  assert.doesNotMatch(skill.description, /\b\d{2,}\s*(Chinese|platforms)/);
+  assert.ok(skill.description.includes('60+'));
 });
 
 test('frontmatter 解析支持多行描述', () => {

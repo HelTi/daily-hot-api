@@ -12,6 +12,8 @@ const START_HELP = `用法: daily-hot-api [start] [选项]
 
 选项:
   -p, --port <端口>      覆盖监听端口（默认取 .env 的 PORT，否则 6689）
+      --host <地址>      覆盖监听地址（默认取 .env 的 HOST，否则 0.0.0.0；
+                         只给本机用可设 127.0.0.1）
   -d, --daemon           在后台启动，日志写入状态目录
       --config <路径>    指定 .env 配置文件（默认顺序: DAILY_HOT_API_ENV_FILE → 当前目录 .env → 状态目录 .env）
       --home <目录>      指定状态目录（默认 ~/.daily-hot-api）
@@ -21,6 +23,7 @@ const START_HELP = `用法: daily-hot-api [start] [选项]
   daily-hot-api                    前台启动
   daily-hot-api -p 6699            前台启动并指定端口
   daily-hot-api start -d           后台启动
+  daily-hot-api start -d --host 127.0.0.1
   daily-hot-api start -d --port 6699 --config ./prod.env`;
 
 const STOP_HELP = `用法: daily-hot-api stop [选项]
@@ -61,6 +64,7 @@ const RESTART_HELP = `用法: daily-hot-api restart [选项]
   -d, --daemon           重启后在后台运行
       --foreground       重启后在前台运行
   -p, --port <端口>      覆盖监听端口
+      --host <地址>      覆盖监听地址
       --config <路径>    指定 .env 配置文件
       --timeout <秒>     等待旧进程退出的超时时间（默认 10 秒）
       --force            停止旧进程时立即 SIGKILL
@@ -77,16 +81,21 @@ const LOGS_HELP = `用法: daily-hot-api logs [选项]
 查看后台服务日志。前台模式的标准输出直接打印在启动终端，
 不会写入日志文件。
 
+日志超过 10 MB 时会在下一次 start -d 轮转为 .log.1 ~ .log.3；
+运行期间想立刻回收空间用 --clear。
+
 选项:
   -n, --lines <行数>     显示最后 N 行（默认 50）
   -f, --follow           持续跟踪新增日志，按 Ctrl+C 退出
+      --clear            清空日志文件（不能与 --follow 同用）
       --home <目录>      指定状态目录（默认 ~/.daily-hot-api）
   -h, --help             查看帮助
 
 示例:
   daily-hot-api logs
   daily-hot-api logs -n 200
-  daily-hot-api logs -f`;
+  daily-hot-api logs -f
+  daily-hot-api logs --clear`;
 
 const HELP_HELP = `用法: daily-hot-api help [命令]
 
@@ -127,6 +136,7 @@ export function globalHelp(): string {
 
 常用选项:
   -p, --port <端口>        覆盖监听端口（默认取 .env 的 PORT，否则 6689）
+      --host <地址>        覆盖监听地址（默认取 .env 的 HOST，否则 0.0.0.0）
   -d, --daemon             在后台运行（start/restart）
       --foreground         在前台运行（restart 用来覆盖原模式）
       --config <路径>      指定 .env 配置文件
@@ -136,6 +146,7 @@ export function globalHelp(): string {
       --json               以 JSON 输出（status/stop）
   -n, --lines <行数>       logs 显示的行数（默认 50）
   -f, --follow             logs 持续跟踪新增日志
+      --clear              logs 清空日志文件
   -h, --help               查看帮助
   -v, --version            查看版本
 
@@ -146,10 +157,11 @@ export function globalHelp(): string {
   daily-hot-api status                  查看状态
   daily-hot-api logs -f                 跟踪后台日志
   daily-hot-api stop                    停止服务
-  npx daily-hot-api start -d            不全局安装，直接用 npx 后台启动
+  npx -y @ttkit/daily-hot-api start -d  不全局安装，直接用 npx 后台启动
 
 环境变量:
   PORT                    服务端口
+  HOST                    监听地址，默认 0.0.0.0
   DAILY_HOT_API_HOME      状态目录，默认 ~/.daily-hot-api
   DAILY_HOT_API_ENV_FILE  显式指定 .env 文件（等同于 --config）
 

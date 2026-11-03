@@ -79,6 +79,33 @@ jobs:
       - name: Unit and mock integration tests
         run: node --test test/skill/*.test.mjs
 
+      - name: Check sources.md matches the source registry
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+          const dir = 'src/host-lists/sources';
+          const registry = new Set();
+          for (const file of fs.readdirSync(dir)) {
+            if (!file.endsWith('.ts') || file === 'index.ts' || file.endsWith('.spec.ts')) continue;
+            const text = fs.readFileSync(`${dir}/${file}`, 'utf8');
+            const match = text.match(/@HotSource\(\{[\s\S]*?name:\s*['"]([^'"]+)['"]/);
+            if (match) registry.add(match[1]);
+          }
+          const doc = fs.readFileSync('skills/daily-hot-api/references/sources.md', 'utf8');
+          const documented = new Set(
+            [...doc.matchAll(/^\|\s*`([a-z0-9-]+)`/gm)].map((m) => m[1]),
+          );
+          const missing = [...registry].filter((name) => !documented.has(name));
+          const stale = [...documented].filter((name) => !registry.has(name));
+          if (missing.length > 0 || stale.length > 0) {
+            if (missing.length > 0) console.error(`sources.md 缺少来源：${missing.join(', ')}`);
+            if (stale.length > 0) console.error(`sources.md 有已删除的来源：${stale.join(', ')}`);
+            console.error('请同步 skills/daily-hot-api/references/sources.md');
+            process.exit(1);
+          }
+          console.log(`sources.md ok (${registry.size} sources)`);
+          NODE
+
       - name: Validate trigger-eval dataset
         run: node evals/daily-hot-api/run-trigger-eval.mjs --dry-run
 

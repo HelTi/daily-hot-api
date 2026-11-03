@@ -15,7 +15,7 @@
 | `hot <source>` | 获取实时热榜 | `--limit` `--type` `--param` `--no-cache` `--full` `--base-url` |
 | `history search` | 搜索历史热点（需 Mongo） | `--source` `--keyword` `--start` `--end` `--page` `--limit` `--sort-by` `--sort-order` `--base-url` |
 | `brief [latest\|YYYY-MM-DD]` | 读取已生成的 AI 简报（只读） | `--date` `--period` `--full` `--base-url` |
-| `stop` | 停止本 skill 启动的实例 | — |
+| `stop` | 停止本 skill 启动的实例（幂等；失败时保留标记可重试） | — |
 
 通用选项：`--json`（兼容占位）、`-h/--help`、`-v/--version`。
 
@@ -46,6 +46,13 @@
 4. 自动启动隔离实例：最小配置，不连 Mongo，不开简报。
 
 `stop` 只停第 2 种；其余一律不碰。
+
+实现细节（改脚本时要保持）：
+
+- 第 2 步先读 `<skill home>/.started-by-skill` 里的 `baseUrl` 直接探 `/health`，命中就不再 spawn CLI；只有探测失败才回落到 `daily-hot-api status --json`。
+- 启动标记在 CLI 确认进程已起来之后、健康检查之前写入，保证健康检查失败的实例仍然可以被 `stop`。
+- `stop` 只在 CLI 返回 0 时删除标记；失败时保留标记并返回退出码 4。
+- 自动启动的实例写 `HOST=127.0.0.1`。该变量由 CLI >= 0.1.3 支持；`CLI_PIN` 还是 0.1.2 时它会被忽略（zod 丢弃未知变量，不会报错），实例仍监听所有网卡。CLI 发布 0.1.3 后把 `CLI_PIN` 一起升上去，这条说明就可以简化。
 
 ## 封装的服务端接口
 
@@ -100,7 +107,7 @@ GET /hot-lists/:source
 | `type` | 部分来源支持的榜单类型 |
 | `rss` | 返回 RSS XML（脚本未封装） |
 
-来源专属参数（脚本用 `--param key=value` 透传）：`nytimes.area`、`history.month/day`、`weatheralarm.province`、`hupu.type/page/pageSize/cursor`、`miyoushe.game`。未知参数会被服务端 400 拒绝。
+来源专属参数（脚本用 `--param key=value` 透传）：`nytimes.area`、`history.month/day`、`weatheralarm.province`、`hupu.page/pageSize/cursor`、`miyoushe.game`。key 允许字母开头的字母/数字/`_`/`-`（含驼峰，如 `pageSize`）；`limit` / `type` / `noCache` / `rss` 是保留参数，要用专用选项。未知参数会被服务端 400 拒绝，且参数校验先于连服务完成，用法错误直接返回退出码 2。
 
 典型响应：
 
@@ -156,7 +163,8 @@ GET /api/briefs/:date?period=daily
 
 简报响应包含 `briefDate`、`period`、`status`、`sources`、`analysis`、`markdown`、`model` 等字段；`rawInputItems` / `searchEvidence` 默认不返回。
 
-脚本输出：`{found, briefDate, period, status, sources, summary, highlights, topicCount, markdown, model}`。`markdown` 默认截断到 6000 字符，`--full` 返回完整内容。
+脚本输出：`{found, briefDate, period, status, sources, summary, highlights, topicCount, markdown, model}`。`markdown` 默认截断到 6000 字符，`--full` 返回完整内容；服务端没有该字段时输出里也不会出现（不会伪造空串）。
+`status` 不是 `success` 时（`generating` / `failed`）额外返回 `note`，说明内容不完整，必须如实转达，不要当成完整简报。
 
 > 本 skill 不封装 `POST /api/briefs/generate` 和 `scheduler/*` 写接口：生成会消耗 AI/Tavily 配额，必须由用户显式发起。
 

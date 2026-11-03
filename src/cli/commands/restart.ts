@@ -1,13 +1,8 @@
 import { DEFAULT_LOG_LINES, type CliOptions } from '../args';
 import type { CommandContext } from '../context';
-import { CliError } from '../errors';
+import { CliError, EXIT_CODES } from '../errors';
 import { info, warn } from '../output';
-import {
-  APP_NAME,
-  buildCliPaths,
-  getPackageRoot,
-  resolveHomeDir,
-} from '../paths';
+import { APP_NAME, buildCliPaths, resolveHomeDir } from '../paths';
 import {
   isProcessAlive,
   processLooksLikeService,
@@ -30,7 +25,9 @@ export async function restartCommand(
   if (
     existing.state &&
     isProcessAlive(existing.state.pid) &&
-    !processLooksLikeService(existing.state.pid, getPackageRoot())
+    !processLooksLikeService(existing.state.pid, {
+      entry: existing.state.entry,
+    })
   ) {
     throw new CliError(
       `运行状态文件记录的 PID ${existing.state.pid} 仍存活，但无法确认是 ${APP_NAME} 进程。` +
@@ -41,7 +38,9 @@ export async function restartCommand(
   const runningState =
     existing.state &&
     isProcessAlive(existing.state.pid) &&
-    processLooksLikeService(existing.state.pid, getPackageRoot())
+    processLooksLikeService(existing.state.pid, {
+      entry: existing.state.entry,
+    })
       ? existing.state
       : null;
 
@@ -52,13 +51,25 @@ export async function restartCommand(
       ? 'foreground'
       : (runningState?.mode ?? 'foreground');
   const port = options.port ?? runningState?.port;
+  const host = options.host ?? runningState?.host ?? undefined;
   const envFile = options.envFile ?? runningState?.envFile ?? undefined;
 
   if (runningState) {
     info(
       `正在重启热点服务（当前 PID ${runningState.pid}，端口 ${runningState.port}）...`,
     );
-    await stopCommand({ ...options, command: 'stop', json: false }, context);
+    const stopCode = await stopCommand(
+      { ...options, command: 'stop', json: false },
+      context,
+    );
+    // stop 失败（例如 PID 无法确认）时不要继续启动：
+    // 否则会在 start 阶段抛出一个和真实原因无关的错误。
+    if (stopCode !== EXIT_CODES.ok) {
+      throw new CliError(
+        `停止旧实例失败（退出码 ${stopCode}），已中止重启。` +
+          `请根据上面的提示处理后重试，或执行 ${APP_NAME} stop --force`,
+      );
+    }
   } else {
     if (existing.state || existing.corrupt) {
       warn('清理了过期运行状态');
@@ -78,7 +89,9 @@ export async function restartCommand(
     daemon: mode === 'daemon',
     foreground: false,
     port,
+    host,
     envFile,
+    clear: false,
     helpTarget: undefined,
   };
   return startCommand(startOptions, context);

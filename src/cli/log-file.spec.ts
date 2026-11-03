@@ -1,13 +1,21 @@
 import {
+  existsSync,
   mkdtempSync,
+  readFileSync,
   rmSync,
+  statSync,
   truncateSync,
   writeFileSync,
   appendFileSync,
 } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { tailFile, readLogChunk } from './log-file';
+import {
+  clearLogFile,
+  readLogChunk,
+  rotateLogFile,
+  tailFile,
+} from './log-file';
 import { CliError } from './errors';
 
 describe('log-file', () => {
@@ -73,5 +81,40 @@ describe('log-file', () => {
     const chunk = readLogChunk('/tmp/dha-missing-log-file.log', 10);
     expect(chunk.text).toBe('');
     expect(chunk.nextPosition).toBe(0);
+  });
+
+  it('超过上限时轮转日志并保留有限份数', () => {
+    const file = makeLogFile('current\n');
+    expect(rotateLogFile(file, 100)).toBe(false);
+
+    writeFileSync(file, 'x'.repeat(200));
+    expect(rotateLogFile(file, 100, 2)).toBe(true);
+    expect(existsSync(file)).toBe(false);
+    expect(statSync(`${file}.1`).size).toBe(200);
+
+    writeFileSync(file, 'y'.repeat(200));
+    expect(rotateLogFile(file, 100, 2)).toBe(true);
+    expect(readFileSync(`${file}.1`, 'utf8')).toBe('y'.repeat(200));
+    expect(readFileSync(`${file}.2`, 'utf8')).toBe('x'.repeat(200));
+
+    writeFileSync(file, 'z'.repeat(200));
+    expect(rotateLogFile(file, 100, 2)).toBe(true);
+    // keep=2 时最旧的一份被丢弃。
+    expect(existsSync(`${file}.3`)).toBe(false);
+    expect(readFileSync(`${file}.2`, 'utf8')).toBe('y'.repeat(200));
+  });
+
+  it('日志不存在时轮转是空操作', () => {
+    expect(rotateLogFile('/tmp/dha-missing-log-file.log', 1)).toBe(false);
+  });
+
+  it('clearLogFile 清空内容并保留文件', () => {
+    const file = makeLogFile('something\n');
+    clearLogFile(file);
+    expect(existsSync(file)).toBe(true);
+    expect(statSync(file).size).toBe(0);
+    expect(() => clearLogFile('/tmp/dha-missing-log-file.log')).toThrow(
+      CliError,
+    );
   });
 });

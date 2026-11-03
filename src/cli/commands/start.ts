@@ -4,10 +4,10 @@ import { closeSync, mkdirSync, openSync, writeSync } from 'fs';
 import { join } from 'path';
 import type { CliOptions } from '../args';
 import type { CommandContext } from '../context';
-import { applyEnvFile, resolvePort } from '../env';
+import { applyEnvFile, resolveHost, resolvePort } from '../env';
 import { CliError, EXIT_CODES } from '../errors';
 import { checkHealth } from '../health';
-import { tailFile } from '../log-file';
+import { rotateLogFile, tailFile } from '../log-file';
 import { field, info, warn } from '../output';
 import {
   APP_NAME,
@@ -25,6 +25,7 @@ import {
   clearRunState,
   isPortInUse,
   isProcessAlive,
+  probeHost,
   processLooksLikeService,
   readRunState,
   sleep,
@@ -39,6 +40,7 @@ interface StartTarget {
   env: NodeJS.ProcessEnv;
   paths: CliPaths;
   port: number;
+  host: string;
   envFile: string | null;
 }
 
@@ -69,10 +71,12 @@ export async function startCommand(
 
   const port = resolvePort(options.port, env);
   env.PORT = String(port);
+  const host = resolveHost(options.host, env);
+  env.HOST = host;
 
   assertNoRunningInstance(paths);
 
-  if (await isPortInUse(port)) {
+  if (await isPortInUse(port, probeHost(host))) {
     throw new CliError(
       `端口 ${port} 已被其他进程占用，请使用 --port 指定其他端口，或先停止占用进程`,
     );
@@ -83,6 +87,7 @@ export async function startCommand(
     env,
     paths,
     port,
+    host,
     envFile: envResolution?.path ?? null,
   };
 
@@ -124,7 +129,7 @@ function assertNoRunningInstance(paths: CliPaths): void {
   }
 
   if (isProcessAlive(state.pid)) {
-    if (processLooksLikeService(state.pid)) {
+    if (processLooksLikeService(state.pid, { entry: state.entry })) {
       throw new CliError(
         `热点服务已在运行（PID ${state.pid}，端口 ${state.port}）。如需重启请运行: ${APP_NAME} restart`,
       );
@@ -144,7 +149,7 @@ async function startForeground(
   mode: RunMode,
 ): Promise<number> {
   info(`正在启动 ${APP_NAME}（${mode === 'daemon' ? '后台' : '前台'}模式）...`);
-  info(`端口: ${target.port}`);
+  info(`监听: ${target.host}:${target.port}`);
   if (target.envFile) {
     info(`配置文件: ${target.envFile}`);
   }
@@ -153,6 +158,7 @@ async function startForeground(
   const state: RunState = {
     pid: process.pid,
     port: target.port,
+    host: target.host,
     mode,
     startedAt: new Date().toISOString(),
     cwd: target.cwd,
@@ -210,7 +216,7 @@ async function startForeground(
     }
   }
 
-  info(`热点服务已启动: http://localhost:${actualPort}`);
+  info(`热点服务已启动: http://${probeHost(target.host)}:${actualPort}`);
   if (mode === 'daemon') {
     info(`PID: ${process.pid}`);
     info(`日志: ${target.paths.logFile}`);
@@ -222,6 +228,10 @@ async function startForeground(
 
 async function startDaemon(target: StartTarget): Promise<number> {
   ensureStateDir(target.paths.homeDir);
+  // 后台进程直接继承日志 fd，运行期间换不了文件；只能在每次启动前轮转。
+  if (rotateLogFile(target.paths.logFile)) {
+    info(`日志超过上限已轮转: ${target.paths.logFile}.1`);
+  }
   let logFd: number;
   try {
     logFd = openSync(target.paths.logFile, 'a');
@@ -234,7 +244,7 @@ async function startDaemon(target: StartTarget): Promise<number> {
   const startedAt = new Date().toISOString();
   writeSync(
     logFd,
-    `\n[${startedAt}] ${APP_NAME} background start (port=${target.port}${
+    `\n[${startedAt}] ${APP_NAME} background start (host=${target.host}, port=${target.port}${
       target.envFile ? `, env_file=${target.envFile}` : ''
     })\n`,
   );
@@ -246,6 +256,7 @@ async function startDaemon(target: StartTarget): Promise<number> {
   const childEnv: NodeJS.ProcessEnv = {
     ...target.env,
     PORT: String(target.port),
+    HOST: target.host,
     [DAEMON_CHILD_ENV]: '1',
   };
 
@@ -277,6 +288,7 @@ async function startDaemon(target: StartTarget): Promise<number> {
     childPid,
     child,
     target.port,
+    target.host,
     target.paths.stateFile,
   );
 
@@ -298,7 +310,9 @@ async function startDaemon(target: StartTarget): Promise<number> {
     );
   }
 
-  info(`热点服务已在后台启动: http://localhost:${target.port}`);
+  info(
+    `热点服务已在后台启动: http://${probeHost(target.host)}:${target.port}（监听 ${target.host}）`,
+  );
   field('PID', childPid);
   field('日志', target.paths.logFile);
   info(
@@ -311,6 +325,7 @@ async function waitForDaemonReady(
   pid: number,
   child: ChildProcess,
   port: number,
+  host: string,
   stateFile: string,
 ): Promise<DaemonReadyResult> {
   const deadline = Date.now() + START_TIMEOUT_MS;
@@ -321,7 +336,7 @@ async function waitForDaemonReady(
     }
 
     const { state } = readRunState(stateFile);
-    if (state?.pid === pid && (await checkHealth(port))) {
+    if (state?.pid === pid && (await checkHealth(port, 2000, host))) {
       return { ok: true };
     }
 

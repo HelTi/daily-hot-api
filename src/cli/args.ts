@@ -17,12 +17,14 @@ export type OptionKey =
   | 'daemon'
   | 'foreground'
   | 'port'
+  | 'host'
   | 'envFile'
   | 'home'
   | 'timeout'
   | 'force'
   | 'follow'
-  | 'lines';
+  | 'lines'
+  | 'clear';
 
 export const COMMAND_NAMES: readonly CommandName[] = [
   'start',
@@ -44,6 +46,8 @@ export interface CliOptions {
   daemon: boolean;
   foreground: boolean;
   port?: number;
+  /** 监听地址；未指定时由 HOST 环境变量或默认值决定。 */
+  host?: string;
   envFile?: string;
   home?: string;
   /** stop/restart 等待进程退出的超时时间，单位秒。 */
@@ -51,6 +55,8 @@ export interface CliOptions {
   force: boolean;
   follow: boolean;
   lines: number;
+  /** logs --clear：清空日志文件 */
+  clear: boolean;
   helpTarget?: CommandName;
 }
 
@@ -67,6 +73,7 @@ const FLAG_MAP: Record<string, OptionKey> = {
   '--foreground': 'foreground',
   '-p': 'port',
   '--port': 'port',
+  '--host': 'host',
   '--config': 'envFile',
   // 兼容写法；注意 Node 24 自身也会解析 --env-file（即使出现在脚本之后），
   // 文件不存在时会被 Node 提前拦截，所以文档和帮助统一推荐 --config。
@@ -78,6 +85,7 @@ const FLAG_MAP: Record<string, OptionKey> = {
   '--follow': 'follow',
   '-n': 'lines',
   '--lines': 'lines',
+  '--clear': 'clear',
 };
 
 const FLAG_DISPLAY: Record<OptionKey, string> = {
@@ -87,16 +95,19 @@ const FLAG_DISPLAY: Record<OptionKey, string> = {
   daemon: '--daemon',
   foreground: '--foreground',
   port: '--port',
+  host: '--host',
   envFile: '--config',
   home: '--home',
   timeout: '--timeout',
   force: '--force',
   follow: '--follow',
   lines: '--lines',
+  clear: '--clear',
 };
 
 const VALUE_OPTIONS: ReadonlySet<OptionKey> = new Set<OptionKey>([
   'port',
+  'host',
   'envFile',
   'home',
   'timeout',
@@ -105,7 +116,7 @@ const VALUE_OPTIONS: ReadonlySet<OptionKey> = new Set<OptionKey>([
 
 /** 每个命令允许的选项；help/version 由全局流程提前处理。 */
 const COMMAND_OPTIONS: Record<CommandName, readonly OptionKey[]> = {
-  start: ['help', 'daemon', 'port', 'envFile', 'home'],
+  start: ['help', 'daemon', 'port', 'host', 'envFile', 'home'],
   stop: ['help', 'json', 'timeout', 'force', 'home'],
   status: ['help', 'json', 'home'],
   restart: [
@@ -113,12 +124,13 @@ const COMMAND_OPTIONS: Record<CommandName, readonly OptionKey[]> = {
     'daemon',
     'foreground',
     'port',
+    'host',
     'envFile',
     'home',
     'timeout',
     'force',
   ],
-  logs: ['help', 'follow', 'lines', 'home'],
+  logs: ['help', 'follow', 'lines', 'clear', 'home'],
   help: ['help'],
   version: [],
 };
@@ -170,8 +182,10 @@ export function parseArgs(argv: string[]): CliOptions {
     foreground: false,
     force: false,
     follow: false,
+    clear: false,
   };
   let port: number | undefined;
+  let host: string | undefined;
   let envFile: string | undefined;
   let home: string | undefined;
   let timeoutSeconds = DEFAULT_STOP_TIMEOUT_SECONDS;
@@ -209,6 +223,11 @@ export function parseArgs(argv: string[]): CliOptions {
           lines = parseNumberOption(key, raw);
         } else if (key === 'home') {
           home = raw;
+        } else if (key === 'host') {
+          host = raw.trim();
+          if (!host) {
+            throw new UsageError('--host 不能为空');
+          }
         } else {
           envFile = raw;
         }
@@ -240,6 +259,9 @@ export function parseArgs(argv: string[]): CliOptions {
           break;
         case 'follow':
           flags.follow = true;
+          break;
+        case 'clear':
+          flags.clear = true;
           break;
         default:
           throw new UsageError(`未知选项: ${flagName}`);
@@ -283,6 +305,7 @@ export function parseArgs(argv: string[]): CliOptions {
       force: false,
       follow: false,
       lines: DEFAULT_LOG_LINES,
+      clear: false,
     };
   }
 
@@ -290,6 +313,10 @@ export function parseArgs(argv: string[]): CliOptions {
 
   if (flags.daemon && flags.foreground) {
     throw new UsageError('--daemon 与 --foreground 不能同时使用');
+  }
+
+  if (flags.clear && flags.follow) {
+    throw new UsageError('--clear 与 --follow 不能同时使用');
   }
 
   // 帮助信息不校验命令与选项的兼容性，`start --help --json` 也展示帮助。
@@ -313,12 +340,14 @@ export function parseArgs(argv: string[]): CliOptions {
     daemon: flags.daemon,
     foreground: flags.foreground,
     port,
+    host,
     envFile,
     home,
     timeoutSeconds,
     force: flags.force,
     follow: flags.follow,
     lines,
+    clear: flags.clear,
     helpTarget,
   };
 }

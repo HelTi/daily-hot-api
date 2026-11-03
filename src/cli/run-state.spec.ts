@@ -1,5 +1,5 @@
 import { type ChildProcess, spawn } from 'child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { createServer } from 'net';
 import { AddressInfo } from 'net';
 import { tmpdir } from 'os';
@@ -9,6 +9,8 @@ import {
   isPortInUse,
   isProcessAlive,
   parseRunState,
+  probeHost,
+  processLooksLikeService,
   readRunState,
   waitForProcessExit,
   writeRunState,
@@ -19,6 +21,7 @@ function makeState(overrides: Partial<RunState> = {}): RunState {
   return {
     pid: process.pid,
     port: 6689,
+    host: '0.0.0.0',
     mode: 'foreground',
     startedAt: new Date().toISOString(),
     cwd: process.cwd(),
@@ -34,6 +37,17 @@ async function spawnIdleProcess(): Promise<ChildProcess> {
   const child = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 60000)'], {
     stdio: 'ignore',
   });
+  await new Promise<void>((resolve, reject) => {
+    child.once('spawn', resolve);
+    child.once('error', reject);
+  });
+  return child;
+}
+
+/** 用给定脚本路径启动一个空转进程，让 ps 看到的命令行包含该路径。 */
+async function spawnScriptProcess(scriptPath: string): Promise<ChildProcess> {
+  writeFileSync(scriptPath, 'setTimeout(() => {}, 60000);\n');
+  const child = spawn(process.execPath, [scriptPath], { stdio: 'ignore' });
   await new Promise<void>((resolve, reject) => {
     child.once('spawn', resolve);
     child.once('error', reject);
@@ -121,6 +135,54 @@ describe('run-state', () => {
     });
     expect(parsed?.cwd).toBe('');
     expect(parsed?.logFile).toBeNull();
+    // 旧版本写的状态文件没有 host 字段，按 0.0.0.0 处理。
+    expect(parsed?.host).toBe('');
+  });
+
+  it('probeHost 把通配地址换成回环地址', () => {
+    expect(probeHost('0.0.0.0')).toBe('127.0.0.1');
+    expect(probeHost('::')).toBe('127.0.0.1');
+    expect(probeHost('')).toBe('127.0.0.1');
+    expect(probeHost(undefined)).toBe('127.0.0.1');
+    expect(probeHost('10.0.0.5')).toBe('10.0.0.5');
+  });
+
+  it('processLooksLikeService 认得 bin 入口，不认只含包名的无关进程', async () => {
+    const dir = makeTempDir();
+    const binDir = join(dir, 'bin');
+    mkdirSync(binDir, { recursive: true });
+
+    const serviceEntry = join(binDir, 'daily-hot-api.js');
+    const serviceChild = await spawnScriptProcess(serviceEntry);
+    children.push(serviceChild);
+    expect(
+      processLooksLikeService(serviceChild.pid as number, {
+        entry: serviceEntry,
+        packageRoot: dir,
+      }),
+    ).toBe(true);
+
+    // 命令行里只是路径含包名（仓库目录、状态目录、日志路径都是这种情况），
+    // 不能被当成本服务，否则 PID 复用时会误杀。
+    const strangerDir = join(dir, 'daily-hot-api');
+    mkdirSync(strangerDir, { recursive: true });
+    const strangerChild = await spawnScriptProcess(
+      join(strangerDir, 'noop.js'),
+    );
+    children.push(strangerChild);
+    expect(
+      processLooksLikeService(strangerChild.pid as number, {
+        entry: serviceEntry,
+        packageRoot: dir,
+      }),
+    ).toBe(false);
+  });
+
+  it('processLooksLikeService 对已退出的进程返回 false', async () => {
+    const child = await spawnIdleProcess();
+    const pid = child.pid as number;
+    await stopChild(child);
+    expect(processLooksLikeService(pid)).toBe(false);
   });
 
   it('isProcessAlive 判断当前进程和已退出的子进程', async () => {

@@ -7,6 +7,7 @@
 | 变量 | 示例值 | 说明 |
 | --- | --- | --- |
 | `PORT` | `6689` | HTTP 服务监听端口 |
+| `HOST` | `0.0.0.0` | HTTP 服务监听地址。默认监听所有网卡；只给本机或反向代理使用时设 `127.0.0.1`。CLI 的 `--host` 优先级高于本变量 |
 | `ALLOWED_DOMAIN` | `*` | CORS 允许的 Origin |
 | `REQUEST_TIMEOUT` | `6000` | 上游 HTTP 请求超时，单位毫秒 |
 | `RSS_MODE` | `false` | 是否让热榜接口默认返回 RSS |
