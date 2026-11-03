@@ -8,7 +8,12 @@ import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { compareVersions, parseVersion } from '../../skills/daily-hot-api/scripts/lib/cli.mjs';
+import {
+  compareVersions,
+  neutralCwd,
+  parseVersion,
+  runCommand,
+} from '../../skills/daily-hot-api/scripts/lib/cli.mjs';
 import { normalizeBaseUrl } from '../../skills/daily-hot-api/scripts/lib/http.mjs';
 import {
   buildHotQuery,
@@ -454,6 +459,32 @@ test('--help 与 --version 可用', async () => {
   assert.match(help.stdout, /daily-hot-api agent skill/);
   const version = await runScript(['--version']);
   assert.match(version.stdout, /1\.1\.0/);
+});
+
+test('runCli 不继承当前 cwd，避免 npx 绕过 CLI_PIN', async () => {
+  // npx 发现 cwd 所在项目能提供同名 bin 时会无视 @<version>，直接跑那个命令。
+  // 在 daily-hot-api 仓库里跑 skill 就会命中：实测拿到全局 0.1.2 而不是 pin 的版本。
+  const result = await runCommand(
+    process.execPath,
+    ['-e', 'process.stdout.write(process.cwd())'],
+    { timeoutMs: 20_000 },
+  );
+  assert.equal(result.code, 0, result.stderr);
+  const repoRoot = path.resolve(HERE, '../..');
+  assert.ok(
+    !result.stdout.startsWith(repoRoot),
+    `CLI 子进程不应在仓库目录里运行，实际：${result.stdout}`,
+  );
+  assert.ok(result.stdout.length > 0);
+
+  // 显式传 cwd 仍然生效。
+  const explicit = await runCommand(
+    process.execPath,
+    ['-e', 'process.stdout.write(process.cwd())'],
+    { cwd: repoRoot, timeoutMs: 20_000 },
+  );
+  assert.ok(explicit.stdout.startsWith(repoRoot));
+  assert.ok(neutralCwd().length > 0);
 });
 
 test('buildHotQuery 接受驼峰参数，拒绝非法与保留 key', () => {

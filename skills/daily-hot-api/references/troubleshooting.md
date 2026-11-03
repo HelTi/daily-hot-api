@@ -26,14 +26,19 @@ node scripts/daily-hot.mjs doctor
 
 ### 首次 ensure 很慢或失败
 
-- 首次会通过 `npx --yes @ttkit/daily-hot-api@0.1.2` 下载 CLI（约 1 MB，通常 5–20 秒）。
+- 首次会通过 `npx --yes @ttkit/daily-hot-api@0.1.3` 下载 CLI（约 1 MB，通常 5–20 秒）。
 - 网络受限/国内网络可先配置镜像再重试：
 
 ```bash
 npm config set registry https://registry.npmmirror.com
 ```
 
-- 也可以全局安装：`npm i -g @ttkit/daily-hot-api@0.1.2`，skill 会优先使用 PATH 中的 CLI。
+- 也可以全局安装：`npm i -g @ttkit/daily-hot-api@0.1.3`，skill 会优先使用 PATH 中的 CLI。
+- 报 `notarget`（找不到该版本）：配了 npm 镜像且镜像还没同步这个版本。等几十分钟，或临时直连官方源：
+
+```bash
+npm_config_registry=https://registry.npmjs.org/ node scripts/daily-hot.mjs ensure
+```
 - 报错会带 CLI 输出的尾部；如果出现 `npm ERR!`，先手动执行一次上面的 npx 命令复现。
 
 ### 端口被占用

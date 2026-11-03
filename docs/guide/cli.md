@@ -331,11 +331,16 @@ npx -y @ttkit/daily-hot-api@latest --version
 
 ### 发布后：同步 Agent Skill 的 CLI 固定版本
 
-skill 用 `CLI_PIN` 固定 npx 使用的精确版本，**确认新版本在 npm 上真正可安装之后**再升级（如果被放进 staged 队列，要先完成 2FA 审批），否则 skill 会去 npx 一个还不存在的版本：
+skill 用 `CLI_PIN` 固定 npx 使用的精确版本，**确认新版本在 npm 上真正可安装之后**再升级，否则 skill 会去 npx 一个还不存在的版本：
 
 ```bash
-npm view @ttkit/daily-hot-api version   # 确认已是新版本
+npm view @ttkit/daily-hot-api version --registry=https://registry.npmjs.org/
 ```
+
+必须指定 `--registry`：本机可能配了镜像，而刚发布的版本在镜像上会滞后。两个常见的「还不能升」的状态：
+
+- 直连 npmjs 仍是旧版本 → 还在 **Staged Packages** 队列里，去 npmjs.com 用 2FA 审批，或 `npm stage list` / `npm stage approve <stage-id>`（都要加 `--registry`）。
+- 直连 npmjs 已是新版本，但默认 registry 还是旧的 → 镜像未同步，通常几十分钟内自动跟上。这期间 pin 可以先升（源码以 npmjs 为准），只是镜像用户要稍后才装得到。
 
 然后更新这几处（保持一致）：
 
@@ -346,7 +351,7 @@ npm view @ttkit/daily-hot-api version   # 确认已是新版本
 | `skills/daily-hot-api/references/troubleshooting.md` | `npx --yes @ttkit/daily-hot-api@<版本>`、`npm i -g` 示例 |
 | `docs/development/agent-skill.md` | CLI 固定版本说明 |
 
-`0.1.3` 还要顺手简化 `HOST` 的过渡说明（`SKILL.md`、`references/api.md`、`docs/guide/agent-skill.md`）：pin 到 0.1.3 之后，隔离实例就是确定只绑定 `127.0.0.1`，不再需要「0.1.2 上会被忽略」这一句。
+如果上一个版本在文档里留了「某个特性要 CLI >= X 才生效」这类过渡说明，pin 升上去之后一并删掉（`SKILL.md`、`references/api.md`、`docs/guide/agent-skill.md`、`AGENTS.md`）。
 
 最后跑一遍 `npm run test:skill` 和 `node evals/daily-hot-api/run-trigger-eval.mjs --dry-run`。
 
