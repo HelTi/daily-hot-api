@@ -338,17 +338,30 @@ export class HotItemRepository implements OnApplicationBootstrap {
   }
 
   // 根据时间范围获取数据
+  /**
+   * 时间窗内的历史热点，按时间倒序。
+   *
+   * `limit` 可选：调用方只需要每源前 N 条时务必传入，否则一个 24 小时窗口
+   * 会把该来源窗口内的全部文档读进内存再丢掉。`{ source: 1, timestamp: -1 }`
+   * 索引已覆盖该排序，sort + limit 在数据库侧完成。
+   */
   async getDataByTimeRange(
     source: string,
     startTime: number,
     endTime: number,
+    limit?: number,
   ): Promise<HotItem[]> {
-    return this.hotItemModel
+    const query = this.hotItemModel
       .find({
         source,
         timestamp: { $gte: startTime, $lte: endTime },
       })
-      .sort({ timestamp: -1 })
-      .lean();
+      .sort({ timestamp: -1 });
+
+    if (typeof limit === 'number' && Number.isFinite(limit) && limit > 0) {
+      query.limit(Math.floor(limit));
+    }
+
+    return query.lean();
   }
 }

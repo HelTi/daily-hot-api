@@ -31,6 +31,8 @@ import { SchedulerModule } from '../scheduler/scheduler.module';
     DeepseekSearchClient,
     BriefSearchService,
   ],
-  exports: [DailyBriefService],
+  // TavilySearchClient / DeepseekSearchClient 供通用新闻简报（P1 搜索增强）
+  // 复用；只增加 export，不改变任何现有行为。
+  exports: [DailyBriefService, TavilySearchClient, DeepseekSearchClient],
 })
 export class DailyBriefModule {}

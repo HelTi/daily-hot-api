@@ -10,7 +10,7 @@
 定时或手动触发
   -> 读取 BRIEF_SOURCES
   -> 刷新热点源数据并保存历史
-  -> 读取最近 BRIEF_LOOKBACK_HOURS 的热点
+  -> 读取最近 BRIEF_LOOKBACK_HOURS 的热点（每源只取前 BRIEF_TOP_ITEMS_PER_SOURCE 条）
   -> 按来源交错选择候选，去掉跨来源同标题主题
   -> 按配置顺序调用 Tavily / DeepSeek 搜索补充背景材料（有结果的查询缓存 1 小时）
   -> OpenAI SDK 生成结构化 JSON 和 Markdown
@@ -147,7 +147,7 @@ DEEPSEEK_SEARCH_TIMEOUT_MS=10000
 
 `briefDate + period` 有唯一索引，用于避免同一天同一类型简报重复写入。
 
-生成时使用原子 claim 和 `generationId` 防止并发任务互相覆盖，心跳用于识别失联任务。超过 `BRIEF_GENERATING_TIMEOUT_MINUTES` 后，旧任务的结果也不能覆盖新任务。强制重新生成已有成功简报时，失败会保留先前的成功内容。普通响应隐藏原始输入、搜索证据和生成状态字段；调试时可以使用 `includeDebug=true`。
+生成时使用原子 claim 和 `generationId` 防止并发任务互相覆盖，心跳用于识别失联任务。超过 `BRIEF_GENERATING_TIMEOUT_MINUTES` 后，旧任务的结果也不能覆盖新任务。重试一条 `failed` 简报时，claim 成功的同时会把状态复位成 `generating` 并清掉上一次的 `error`，避免重试期间接口一直返回失败。强制重新生成已有成功简报时，整个过程保持 `success` 并继续返回旧内容，失败也会保留先前的成功内容。普通响应隐藏原始输入、搜索证据和生成状态字段；调试时可以使用 `includeDebug=true`。
 
 `analysis` 里包含：
 

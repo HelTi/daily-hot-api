@@ -448,6 +448,11 @@ export class DailyBriefRepository {
     };
   }
 
+  /**
+   * 原子占位：同一天/period 只允许一个生成任务。
+   * 返回 false 表示已有活动任务（含并发 upsert 撞唯一索引的 11000）。
+   * 占位成功且旧记录是 failed 时，顺带把状态复位成 generating 并清除旧 error。
+   */
   async claimGeneration(data: {
     briefDate: string;
     period: string;
@@ -485,7 +490,25 @@ export class DailyBriefRepository {
           { upsert: true, new: true },
         )
         .lean();
-      return claimed?.generationId === data.generationId;
+      if (claimed?.generationId !== data.generationId) return false;
+
+      // 重新占位一条此前 failed 的记录时，状态必须回到 generating 并清掉上一次
+      // 的 error，否则整个生成过程中 /api/briefs/:date 仍然报 failed + 旧错误。
+      // status === 'success' 的记录绝不在这里改动：force 重生成失败时要原样保留
+      // 旧的成功内容（见 markFailed 的 previousSuccess 分支）。
+      if (claimed.status === 'failed') {
+        await this.dailyBriefModel.updateOne(
+          {
+            briefDate: data.briefDate,
+            period: data.period,
+            generationId: data.generationId,
+            status: 'failed',
+          },
+          { $set: { status: 'generating' }, $unset: { error: 1 } },
+        );
+      }
+
+      return true;
     } catch (error) {
       // 已有活动生成任务时，带 $or 的 upsert 会撞上日期/周期唯一索引。
       if ((error as { code?: number }).code === 11000) return false;

@@ -3,11 +3,13 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { ConfigService } from '@nestjs/config';
 import { HotItem, HotItemSchema } from './schemas/hot-item.schema';
 import { DailyBrief, DailyBriefSchema } from './schemas/daily-brief.schema';
+import { NewsBrief, NewsBriefSchema } from './schemas/news-brief.schema';
 import {
   SourceConfig,
   SourceConfigSchema,
 } from './schemas/source-config.schema';
 import { DailyBriefRepository } from './repositories/daily-brief.repository';
+import { NewsBriefRepository } from './repositories/news-brief.repository';
 import { HotItemRepository } from './repositories/hot-item.repository';
 import { SourceConfigRepository } from './repositories/source-config.repository';
 
@@ -40,10 +42,21 @@ import { SourceConfigRepository } from './repositories/source-config.repository'
     MongooseModule.forFeature([
       { name: HotItem.name, schema: HotItemSchema },
       { name: DailyBrief.name, schema: DailyBriefSchema },
+      { name: NewsBrief.name, schema: NewsBriefSchema },
       { name: SourceConfig.name, schema: SourceConfigSchema },
     ]),
   ],
-  providers: [HotItemRepository, DailyBriefRepository, SourceConfigRepository],
-  exports: [HotItemRepository, DailyBriefRepository, SourceConfigRepository],
+  providers: [
+    HotItemRepository,
+    DailyBriefRepository,
+    NewsBriefRepository,
+    SourceConfigRepository,
+  ],
+  exports: [
+    HotItemRepository,
+    DailyBriefRepository,
+    NewsBriefRepository,
+    SourceConfigRepository,
+  ],
 })
 export class DatabaseModule {}

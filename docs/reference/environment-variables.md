@@ -50,6 +50,37 @@ Redis 使用延迟连接，连接失败时不会阻止进程启动。历史热�
 | `BRIEF_SEARCH_CONCURRENCY` | `3` | 搜索增强的最大并发数 |
 | `BRIEF_SEARCH_PROVIDERS` | `tavily,deepseek` | 搜索平台优先级，逗号分隔；可选 `tavily`、`deepseek`，留空关闭搜索增强 |
 
+## 通用新闻简报
+
+新增的通用新闻简报使用独立前缀 `NEWS_BRIEF_*`，与上面的 `BRIEF_*` 互不影响。AI 模型复用 `OPENAI_*` / `AI_*`，不新增密钥变量。
+
+| 变量 | 示例值 | 说明 |
+| --- | --- | --- |
+| `NEWS_BRIEF_ENABLED` | `false` | 启动应用时是否注册新闻简报 Cron |
+| `NEWS_BRIEF_CRON_EXPRESSION` | `30 8 * * *` | 新闻简报生成 Cron 表达式 |
+| `NEWS_BRIEF_TIMEZONE` | `Asia/Shanghai` | 简报日期和 Cron 时区 |
+| `NEWS_BRIEF_CATEGORIES` | `finance,general,tech,sports` | 启用的板块及顺序，可选 `finance`、`general`、`tech`、`sports`；未知板块会导致启动失败 |
+| `NEWS_BRIEF_LOOKBACK_HOURS` | `24` | 历史热点回看窗口，单位小时 |
+| `NEWS_BRIEF_TOP_ITEMS_PER_SOURCE` | `8` | 每个来源最多纳入的候选条数 |
+| `NEWS_BRIEF_MAX_CANDIDATES` | `40` | 送入模型的候选条目上限，取值 10–40 |
+| `NEWS_BRIEF_MAX_ITEMS_PER_CATEGORY` | `8` | 每份简报的输出条数上限，取值 3–10；实际生效值为 min(板块 profile `maxItems`, 该值, 10) |
+| `NEWS_BRIEF_SOURCE_CONCURRENCY` | `3` | 板块内抓取热榜源的最大并发数 |
+| `NEWS_BRIEF_CATEGORY_CONCURRENCY` | `1` | 板块之间的生成并发数，默认串行 |
+| `NEWS_BRIEF_GENERATING_TIMEOUT_MINUTES` | `30` | 生成尝试的过期阈值，单位分钟 |
+| `NEWS_BRIEF_MANUAL_GENERATE_ENABLED` | `false` | 是否允许手动调用 `POST /api/news-briefs/generate`；为 `false` 时该接口返回 403 |
+
+搜索增强默认关闭。以下变量只在 `NEWS_BRIEF_SEARCH_ENABLED=true` 时生效，搜索平台密钥复用上面的 `TAVILY_API_KEY`、`DEEPSEEK_SEARCH_API_KEY` 等现有变量：
+
+| 变量 | 示例值 | 说明 |
+| --- | --- | --- |
+| `NEWS_BRIEF_SEARCH_ENABLED` | `false` | 搜索增强总开关；开启后为候选新闻补充搜索证据 |
+| `NEWS_BRIEF_SEARCH_MAX_QUERIES` | `6` | 每个板块最多搜索的候选条数，取值 1–8 |
+| `NEWS_BRIEF_SEARCH_CONCURRENCY` | `3` | 同时进行的搜索数量，最小 1 |
+| `NEWS_BRIEF_SEARCH_QUERY_MAX_CHARS` | `2000` | 单条搜索词最大字符数，取值 100–2000 |
+| `NEWS_BRIEF_SEARCH_PROVIDERS` | `tavily,deepseek` | 搜索平台优先级，逗号分隔；可选 `tavily`、`deepseek`，留空关闭搜索增强 |
+
+> 搜索词上限 2000 字由本项目截断；DeepSeek Search 接口自身只接受 128 个 Unicode 字符，超长 query 在 DeepSeek 平台内部还会再截断，Tavily 不受此限制。
+
 ## AI 与搜索服务
 
 | 变量 | 示例值 | 说明 |

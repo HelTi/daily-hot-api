@@ -35,6 +35,7 @@ export default defineConfig({
             { text: '历史热点', link: '/guide/history' },
             { text: '定时任务', link: '/guide/scheduler' },
             { text: 'AI 每日简报', link: '/guide/daily-brief' },
+            { text: '通用新闻简报', link: '/guide/news-brief' },
           ],
         },
       ],
@@ -61,6 +62,10 @@ export default defineConfig({
             {
               text: '每日简报前端接入',
               link: '/development/daily-brief-frontend',
+            },
+            {
+              text: '新闻简报前端接入',
+              link: '/development/news-brief-frontend',
             },
             {
               text: '架构评审与优化建议',

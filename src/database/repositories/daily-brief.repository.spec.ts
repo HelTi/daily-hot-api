@@ -2,12 +2,32 @@ import { DailyBriefRepository } from './daily-brief.repository';
 
 describe('DailyBriefRepository generation fencing', () => {
   const findOneAndUpdate = jest.fn();
-  const repository = new DailyBriefRepository({ findOneAndUpdate } as never);
+  const updateOne = jest.fn();
+  const repository = new DailyBriefRepository({
+    findOneAndUpdate,
+    updateOne,
+  } as never);
   const leanResult = (value: unknown) => ({
     lean: () => Promise.resolve(value),
   });
+  const claimStaleBefore = new Date('2026-10-22T00:00:00Z');
+  const claimData = () => ({
+    briefDate: '2026-10-22',
+    period: 'daily',
+    sources: ['cls'],
+    inputWindow: {
+      start: claimStaleBefore,
+      end: claimStaleBefore,
+      lookbackHours: 24,
+    },
+    generationId: 'run-1',
+    staleBefore: claimStaleBefore,
+  });
 
-  beforeEach(() => findOneAndUpdate.mockReset());
+  beforeEach(() => {
+    findOneAndUpdate.mockReset();
+    updateOne.mockReset().mockResolvedValue({ modifiedCount: 1 });
+  });
 
   it('atomically claims a missing or stale generation', async () => {
     findOneAndUpdate.mockReturnValue(leanResult({ generationId: 'run-1' }));
@@ -39,6 +59,57 @@ describe('DailyBriefRepository generation fencing', () => {
     expect(update.$set).toMatchObject({ generationId: 'run-1' });
     expect(update.$set.status).toBeUndefined();
     expect(options.upsert).toBe(true);
+    // 新建或续租一条 generating 记录时不需要额外的状态复位写入
+    expect(updateOne).not.toHaveBeenCalled();
+  });
+
+  it('resets a previously failed brief to generating and clears the old error', async () => {
+    findOneAndUpdate.mockReturnValue(
+      leanResult({ generationId: 'run-1', status: 'failed' }),
+    );
+
+    await expect(repository.claimGeneration(claimData())).resolves.toBe(true);
+
+    expect(updateOne).toHaveBeenCalledTimes(1);
+    const [filter, update] = updateOne.mock.calls[0];
+    expect(filter).toEqual({
+      briefDate: '2026-10-22',
+      period: 'daily',
+      generationId: 'run-1',
+      status: 'failed',
+    });
+    expect(update).toEqual({
+      $set: { status: 'generating' },
+      $unset: { error: 1 },
+    });
+  });
+
+  it('never rewrites a successful brief while regenerating it', async () => {
+    findOneAndUpdate.mockReturnValue(
+      leanResult({ generationId: 'run-1', status: 'success' }),
+    );
+
+    await expect(repository.claimGeneration(claimData())).resolves.toBe(true);
+
+    // force 重生成失败时要原样保留旧成功内容，这里不能把它改成 generating
+    expect(updateOne).not.toHaveBeenCalled();
+  });
+
+  it('reports a lost claim when another generation holds the document', async () => {
+    findOneAndUpdate.mockReturnValue(
+      leanResult({ generationId: 'other-run', status: 'generating' }),
+    );
+
+    await expect(repository.claimGeneration(claimData())).resolves.toBe(false);
+    expect(updateOne).not.toHaveBeenCalled();
+  });
+
+  it('treats a duplicate key error as an active generation', async () => {
+    findOneAndUpdate.mockImplementation(() => {
+      throw Object.assign(new Error('duplicate'), { code: 11000 });
+    });
+
+    await expect(repository.claimGeneration(claimData())).resolves.toBe(false);
   });
 
   it('requires the active generation ID before publishing success', async () => {

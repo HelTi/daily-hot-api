@@ -138,6 +138,66 @@ curl -X POST http://localhost:6689/api/briefs/generate \
 
 每日简报的请求参数、响应字段和清理规则见[AI 每日简报](/guide/daily-brief)。
 
+## 新闻简报
+
+通用新闻简报与 AI 每日简报是两套独立能力：新闻简报按板块（财经、综合新闻、科技、体育）输出统一的「标题 / 简介 / 内容 / 来源」条目，不做产业链或股票关联；数据写入独立的 `newsbriefs` 集合。
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `POST` | `/api/news-briefs/generate` | 手动生成（默认禁用，`NEWS_BRIEF_MANUAL_GENERATE_ENABLED=false` 时返回 403） |
+| `GET` | `/api/news-briefs/config` | 获取非敏感配置、搜索增强开关和调度实时状态 |
+| `GET` | `/api/news-briefs/categories` | 获取板块目录（前端筛选用） |
+| `GET` | `/api/news-briefs/digest` | 一次获取多个板块同一天的简报（首页聚合） |
+| `GET` | `/api/news-briefs/latest` | 获取指定板块最新成功简报，`category` 必填 |
+| `GET` | `/api/news-briefs` | 分页查询简报摘要列表，不返回 `items` |
+| `GET` | `/api/news-briefs/:date` | 获取指定日期、指定板块的简报 |
+| `DELETE` | `/api/news-briefs/:date` | 删除指定日期/板块简报，`category` 必填 |
+| `DELETE` | `/api/news-briefs/history` | 按保留周期或截止日期批量清理 |
+| `GET` | `/api/news-briefs/scheduler/status` | 获取新闻简报调度状态 |
+| `POST` | `/api/news-briefs/scheduler/start` | 启动新闻简报调度器 |
+| `POST` | `/api/news-briefs/scheduler/stop` | 停止新闻简报调度器 |
+| `POST` | `/api/news-briefs/scheduler/reconfigure` | 重新注册新闻简报 Cron |
+
+::: warning 手动生成接口默认关闭
+`POST /api/news-briefs/generate` 会消耗 AI 调用费用，默认被 `NEWS_BRIEF_MANUAL_GENERATE_ENABLED=false` 禁用并返回 403。即使临时打开，也只应由运维在后台触发；前端只允许调用只读 `GET` 接口。写接口需要由反向代理 / 网关限制来源，见[通用新闻简报](/guide/news-brief)。
+:::
+
+::: danger 删除接口
+两个 `DELETE` 路由没有内建鉴权，删除后无法恢复。执行前先做安全 no-op 检查，确认日期、板块和 `period` 后再删除，并确保网关层限制来源。
+:::
+
+查询示例：
+
+```bash
+curl http://localhost:6689/api/news-briefs/config
+curl http://localhost:6689/api/news-briefs/categories
+curl 'http://localhost:6689/api/news-briefs/digest?categories=finance,tech'
+curl 'http://localhost:6689/api/news-briefs/latest?category=tech'
+curl 'http://localhost:6689/api/news-briefs?page=1&limit=20&category=tech'
+curl 'http://localhost:6689/api/news-briefs/2026-11-08?category=tech'
+```
+
+说明：
+
+- `digest` 的 `categories` 省略时返回全部启用板块，未知或未启用的 code 返回 400。响应里的 `status` 是读取层状态：`missing` 表示该日期该板块没有记录（数据库状态仍只有 `generating` / `success` / `failed` 三种），此时 `brief` 为 `null`。
+- 分页列表参数：`page`（≥1，默认 1）、`limit`（1–100，默认 20）、`category`、`status`、`period`（默认 `daily`）。列表不返回 `items`，需要条目内容时按日期查询单份简报。
+- `latest` 与 `:date` 都支持 `period`（默认 `daily`）和 `includeDebug=true`；默认响应不包含 `rawInputItems` 和 `searchEvidence`。没有简报时 `latest` / `:date` 返回 200 空响应体。
+- 搜索增强默认关闭（`NEWS_BRIEF_SEARCH_ENABLED=false`）；开启后为候选新闻补充搜索证据，`searchProvidersUsed` 返回实际命中的平台。
+
+安全删除示例：
+
+```bash
+# 安全 no-op 检查：期望 deletedCount: 0
+curl -X DELETE 'http://localhost:6689/api/news-briefs/1900-01-01?category=tech&period=manual-test'
+curl -X DELETE 'http://localhost:6689/api/news-briefs/history?beforeDate=1900-01-01'
+
+# 确认范围后再执行（不可恢复）
+curl -X DELETE 'http://localhost:6689/api/news-briefs/2026-11-08?category=tech'
+curl -X DELETE 'http://localhost:6689/api/news-briefs/history?olderThan=1y&category=tech'
+```
+
+响应结构与字段说明见[数据结构](/reference/data-structures)；前端聚合、分页和状态处理见[新闻简报前端接入](/development/news-brief-frontend)；功能与配置说明见[通用新闻简报](/guide/news-brief)。
+
 ## 校验与错误
 
 服务启用了全局请求校验：

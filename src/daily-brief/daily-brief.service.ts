@@ -403,10 +403,13 @@ export class DailyBriefService {
     const topItemsPerSource = this.config.topItemsPerSource;
     const results = await Promise.all(
       sources.map(async (source) => {
+        // limit 下推到 Mongo：否则回看窗口会把该来源窗口内的全部文档读进内存
+        // 再丢掉，{ source: 1, timestamp: -1 } 索引已覆盖这个排序。
         const items = await this.hotItemRepository.getDataByTimeRange(
           source,
           startTime,
           endTime,
+          topItemsPerSource,
         );
 
         if (!Array.isArray(items)) {

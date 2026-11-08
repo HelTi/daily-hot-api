@@ -30,6 +30,7 @@ src/
   history/                Historical hot item query APIs
   scheduler/              Scheduled hot data fetch tasks
   daily-brief/            AI daily brief module
+  news-brief/             Generic multi-category news brief module
   cli/                    npm CLI: start/stop/status/restart/logs
   http/                   Shared HTTP client for source fetching
   token/                  Token/signature helpers for selected sources
@@ -212,6 +213,8 @@ Behavior:
 - All external calls are bounded: `TAVILY_TIMEOUT_MS` per search, `AI_TIMEOUT_MS` / `AI_MAX_RETRIES` per analysis.
 - Rejects an analysis without a summary or without topics, so an empty AI response is recorded as `failed` rather than `success`.
 - A brief stuck in `generating` for longer than `BRIEF_GENERATING_TIMEOUT_MINUTES` is treated as stale and may be regenerated without `force`.
+- `claimGeneration` also resets a retried `failed` brief to `generating` and `$unset`s its old `error`, so `GET /api/briefs/:date` does not report `failed` plus a stale error for the whole retry. It never touches a `success` record: a forced regeneration must keep serving the old content and `markFailed`'s `previousSuccess` branch depends on it. `src/news-brief` does the same thing per category.
+- History reads pass `BRIEF_TOP_ITEMS_PER_SOURCE` as `getDataByTimeRange`'s optional `limit`. Without it the lookback window loads every stored document for that source just to keep the first N; `{ source: 1, timestamp: -1 }` already covers the sort.
 - `GET /api/briefs/config` reports `enabled` from the scheduler's live state, so it reflects `scheduler/start` and `scheduler/stop`.
 - Saves generated briefs to MongoDB.
 - Stores `rawInputItems` and `searchEvidence` for backend debugging, but does not return them by default.
@@ -256,6 +259,124 @@ curl http://localhost:6689/api/briefs/latest
 curl -X DELETE 'http://localhost:6689/api/briefs/history?olderThan=1m'
 ```
 
+## News Brief Module
+
+The generic news brief feature lives in `src/news-brief` and is intentionally separate from `src/daily-brief`: its own `/api/news-briefs` namespace, its own `newsbriefs` collection, its own `NEWS_BRIEF_*` config, and a unified item contract (title / summary / content / source) shared by every category. `src/daily-brief` behavior and the `/api/briefs` responses must not change.
+
+Key files:
+
+```text
+src/news-brief/news-brief.module.ts
+src/news-brief/news-brief.controller.ts
+src/news-brief/news-brief.service.ts
+src/news-brief/news-brief.scheduler.ts
+src/news-brief/news-brief.config.ts
+src/news-brief/categories/news-category.registry.ts
+src/news-brief/clients/news-brief-ai.client.ts
+src/news-brief/clients/news-brief-search.service.ts
+src/news-brief/interfaces/news-brief.interface.ts
+src/news-brief/dto/generate-news-brief.dto.ts
+src/news-brief/dto/news-brief-date-param.dto.ts
+src/news-brief/dto/list-news-briefs-query.dto.ts
+src/database/schemas/news-brief.schema.ts
+src/database/repositories/news-brief.repository.ts
+```
+
+Behavior:
+
+- Categories are code-defined in `categories/news-category.registry.ts`: `finance`（财经）, `general`（综合新闻）, `tech`（科技）, `sports`（体育）. There is no `auto` category. `NEWS_BRIEF_CATEGORIES` only selects and orders them; an unknown code fails at startup. `NewsBriefScheduler.onModuleInit` validates every registered profile (not just the enabled ones) against the live `HotListsService` registry, so a typo in a disabled profile's sources still fails fast. It has to stay in `onModuleInit`: source discovery is not done at construction time.
+- The finance category only summarizes news; it does not map stocks or industry chains. `/api/briefs` remains the only feature producing A-share analysis.
+- Reads settings through `NewsBriefConfigService` (same `getOrThrow` pattern as `DailyBriefConfigService`); defaults live only in `src/config/validation.schema.ts`.
+- Refreshes the category's hot list sources through `FetchHotDataTask` and reads history through `HotItemRepository.getDataByTimeRange`. A source disabled in `source_configs` only logs a warning and does not block other sources.
+- One `generate()` call refreshes each source at most once. Categories share sources (`weibo` / `baidu` / `zhihu` / `toutiao` / `sina-news` are in both `general` and `sports`) and the refresh is `noCache=true`, so the in-flight promise is cached per source in a per-run `GenerationRun`. Do not drop that memo: it turns into duplicate upstream requests plus duplicate history writes.
+- History reads pass `NEWS_BRIEF_TOP_ITEMS_PER_SOURCE` as `getDataByTimeRange`'s optional `limit`. Without it a 24h window loads every stored document for that source just to keep the first N; `{ source: 1, timestamp: -1 }` already covers the sort.
+- Merges fresh and historical candidates by `{source, url}`, de-dupes, interleaves sources, then truncates to `NEWS_BRIEF_MAX_CANDIDATES`. The interleave bound is the longest per-source bucket, **not** `NEWS_BRIEF_TOP_ITEMS_PER_SOURCE`: fresh and history each contribute up to N items per source, so bounding by N throws away half the candidates before `NEWS_BRIEF_MAX_CANDIDATES` is reached (worst with a `sources` override or when most sources fail).
+- `NewsBriefAiClient` builds a category-agnostic prompt, requests JSON, validates with zod, backfills `source` from `sourceRef` (the model never sees URLs), and drops invalid items. Zero valid items is recorded as `failed`, never written as an empty `success`.
+- Status machine matches the daily brief: atomic claim + `generationId` + heartbeat + unique index `{ briefDate, period, category }`. A forced regeneration failure keeps the previous `success` content.
+- `claimGeneration` also resets a retried `failed` record to `generating` and `$unset`s its old `error`, so `/digest` and `/:date` do not report `failed` plus a stale error for the whole retry. It never touches a `success` record: a forced regeneration must keep serving the old content and `markFailed`'s retained branch depends on it.
+- `generate()` always returns one `results[]` entry per category: each `generateForCategory` call is wrapped in a `.catch` that turns an unexpected throw (a Mongo hiccup around the claim, before any `markFailed` is possible) into that category's `failed` result instead of a 500 that discards the other categories' work.
+- `POST /api/news-briefs/generate` is disabled by default (`NEWS_BRIEF_MANUAL_GENERATE_ENABLED=false`, responds 403). Only ops should enable it temporarily; frontends must only call the read-only GET routes.
+- Search enrichment (P1, default off): `isSearchActive(profile)` gates it on three conditions — `NEWS_BRIEF_SEARCH_ENABLED=true`, the category profile's `search === true`, and `NewsBriefSearchService.isConfigured()`. It is configuration-only on purpose, so the prompt shape does not drift with per-query results. When active, `buildSearchEvidence` enriches up to `NEWS_BRIEF_SEARCH_MAX_QUERIES` de-duplicated candidates, at most `NEWS_BRIEF_SEARCH_CONCURRENCY` at a time. The query is `title + desc` truncated to `NEWS_BRIEF_SEARCH_QUERY_MAX_CHARS` (≤ 2000); providers come from `NEWS_BRIEF_SEARCH_PROVIDERS`; a failed query degrades to empty evidence without blocking generation; successful queries are cached 1 hour (`news-brief:search:v1:*`). Only an active gate raises the prompt content target from 300 to 600 chars — with the switch on but no provider key, or a category that opts out, it stays 300 so the model does not pad 600 chars out of a title and a one-line desc.
+- Search reuses `TavilySearchClient` / `DeepseekSearchClient` from `src/daily-brief/clients/`. `DailyBriefModule` now exports those two clients (export-only change, no behavior change) and `NewsBriefModule` imports `DailyBriefModule` plus `CacheModule`. Search keys are the existing `TAVILY_*` / `DEEPSEEK_SEARCH_*` variables; there are no new key variables.
+- `GET /api/news-briefs/digest` aggregates up to one brief per category with N `findOne` reads. Its `status` is a read-layer state: `success | generating | failed | missing`, where `missing` means no document for that date (the DB enum stays three-valued) and `brief` is `null`.
+- `GET /api/news-briefs` is a paginated summary list (`page`, `limit`, `category`, `status`, `period`) backed by `NewsBriefRepository.list()`, which uses an aggregation pipeline (`$match` / `$sort` / `$skip` / `$limit` / `$project` with `$size`). It returns no `items` / `highlights`; keep the pipeline MongoDB 6.0 compatible and covered by `src/database/repositories/mongo-compatibility.spec.ts` (the spec explicitly instantiates `NewsBriefRepository`).
+- `DELETE /api/news-briefs/:date?category=&period=` and `DELETE /api/news-briefs/history?olderThan=|beforeDate=&category=` are destructive and have no auth. `category` is required for date deletes; `olderThan` and `beforeDate` are mutually exclusive. Document safe `deletedCount: 0` no-op checks and never expose them to the frontend.
+- Default responses hide `rawInputItems` and `searchEvidence`; `includeDebug=true` is backend debugging only. A lookup with no data returns `200` with an empty body. Frontend integration guide: `docs/development/news-brief-frontend.md`.
+
+News brief variables:
+
+```bash
+NEWS_BRIEF_ENABLED=false
+NEWS_BRIEF_CRON_EXPRESSION=30 8 * * *
+NEWS_BRIEF_TIMEZONE=Asia/Shanghai
+NEWS_BRIEF_CATEGORIES=finance,general,tech,sports
+NEWS_BRIEF_LOOKBACK_HOURS=24
+NEWS_BRIEF_TOP_ITEMS_PER_SOURCE=8
+NEWS_BRIEF_MAX_CANDIDATES=40
+NEWS_BRIEF_MAX_ITEMS_PER_CATEGORY=8
+NEWS_BRIEF_SOURCE_CONCURRENCY=3
+NEWS_BRIEF_CATEGORY_CONCURRENCY=1
+NEWS_BRIEF_GENERATING_TIMEOUT_MINUTES=30
+NEWS_BRIEF_MANUAL_GENERATE_ENABLED=false
+
+NEWS_BRIEF_SEARCH_ENABLED=false
+NEWS_BRIEF_SEARCH_MAX_QUERIES=6
+NEWS_BRIEF_SEARCH_CONCURRENCY=3
+NEWS_BRIEF_SEARCH_QUERY_MAX_CHARS=2000
+NEWS_BRIEF_SEARCH_PROVIDERS=tavily,deepseek
+```
+
+AI model settings are shared with the daily brief (`OPENAI_API_KEY`, `OPENAI_API_BASE_URL`, `AI_MODEL`, `AI_TIMEOUT_MS`, `AI_MAX_RETRIES`); search keys are the existing `TAVILY_API_KEY` / `DEEPSEEK_SEARCH_API_KEY` etc. No new key variables.
+
+## News Brief API Summary
+
+```text
+POST   /api/news-briefs/generate            # disabled by default, 403
+GET    /api/news-briefs/config
+GET    /api/news-briefs/categories
+GET    /api/news-briefs/digest?categories=&date=&period=
+GET    /api/news-briefs/latest?category=&period=&includeDebug=
+GET    /api/news-briefs?page=&limit=&category=&status=&period=
+GET    /api/news-briefs/:date?category=&period=&includeDebug=
+DELETE /api/news-briefs/:date?category=&period=
+DELETE /api/news-briefs/history?olderThan=|beforeDate=&category=
+
+GET    /api/news-briefs/scheduler/status
+POST   /api/news-briefs/scheduler/start
+POST   /api/news-briefs/scheduler/stop
+POST   /api/news-briefs/scheduler/reconfigure
+```
+
+`GET /api/news-briefs/latest` requires `category`; `period` defaults to `daily`. The digest `missing` status is read-layer only (no DB record for that date). There is no built-in authentication: the write routes (`POST /generate`, both `DELETE` routes, `scheduler/*`) must be restricted at the reverse proxy / gateway layer, and `POST /generate` stays disabled unless ops explicitly turn it on. Do not add auth to these without asking the maintainer first.
+
+Examples:
+
+```bash
+curl http://localhost:6689/api/news-briefs/config
+curl http://localhost:6689/api/news-briefs/categories
+curl 'http://localhost:6689/api/news-briefs/digest?categories=finance,tech'
+curl 'http://localhost:6689/api/news-briefs?page=1&limit=20&period=daily'
+curl 'http://localhost:6689/api/news-briefs/latest?category=tech'
+curl 'http://localhost:6689/api/news-briefs/2026-11-08?category=tech'
+
+# destructive routes: safe no-op checks first (expect deletedCount: 0)
+curl -X DELETE 'http://localhost:6689/api/news-briefs/1900-01-01?category=tech&period=manual-test'
+curl -X DELETE 'http://localhost:6689/api/news-briefs/history?beforeDate=1900-01-01'
+```
+
+Verification after `npm run build`:
+
+```bash
+PORT=6699 BRIEF_ENABLED=false NEWS_BRIEF_ENABLED=false npm run start:prod
+curl http://localhost:6699/api/news-briefs/config
+curl http://localhost:6699/api/news-briefs/categories
+curl http://localhost:6699/api/news-briefs/scheduler/status
+curl 'http://localhost:6699/api/news-briefs/digest?categories=finance,tech'
+curl 'http://localhost:6699/api/news-briefs?page=1&limit=20'
+curl 'http://localhost:6699/api/news-briefs/latest?category=tech'     # 200, empty body
+curl -X POST http://localhost:6699/api/news-briefs/generate           # 403 while disabled
+```
+
 ## Hot List Sources
 
 Hot list sources live in `src/host-lists/sources`.
@@ -282,18 +403,19 @@ When adding a schema or repository:
 2. Register it in `src/database/database.module.ts` via `MongooseModule.forFeature`.
 3. Add and export the repository from `DatabaseModule`.
 
-Daily brief collection has a unique index on `{ briefDate: 1, period: 1 }`.
+Daily brief collection has a unique index on `{ briefDate: 1, period: 1 }`. News brief collection has a unique index on `{ briefDate: 1, period: 1, category: 1 }`.
 
 Aggregation pipelines must stay MongoDB 6.0 compatible: the server and local development both run 6.0, and `docker-compose.yml` pins `mongo:6.0`. `src/database/repositories/mongo-compatibility.spec.ts` extracts every operator the pipelines emit, fails on anything introduced after 6.0, and also fails on any operator missing from its whitelist, so a new operator has to be confirmed as 6.0-available before it lands. Run it after touching any pipeline.
 
 ## Scheduler Notes
 
-There are two scheduler areas:
+There are three scheduler areas:
 
 - `src/scheduler`: hot data fetching. MongoDB backup is an external operation documented in `docs/operations/volumes.md`.
 - `src/daily-brief/daily-brief.scheduler.ts`: AI daily brief generation.
+- `src/news-brief/news-brief.scheduler.ts`: generic news brief generation.
 
-Both use `SchedulerRegistry` and cron jobs.
+All use `SchedulerRegistry` and cron jobs.
 
 Avoid adding another `ScheduleModule.forRoot()` unless necessary. If refactoring scheduler modules, ensure cron registration still works at app startup.
 
