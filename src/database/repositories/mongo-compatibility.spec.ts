@@ -1,5 +1,6 @@
 import { DailyBriefRepository } from './daily-brief.repository';
 import { HotItemRepository } from './hot-item.repository';
+import { NewsBriefRepository } from './news-brief.repository';
 
 /**
  * 部署目标是 MongoDB 6.0（服务器与本机均为 6.0），这里守住聚合管道不引入
@@ -122,6 +123,46 @@ describe('daily brief aggregation pipelines stay MongoDB 6.0 compatible', () => 
     );
     const unexpected = [...used].filter((operator) => !allowed.has(operator));
     expect(unexpected).toEqual([]);
+  });
+});
+
+describe('news brief aggregation pipelines stay MongoDB 6.0 compatible', () => {
+  it('only uses operators available in MongoDB 6.0', async () => {
+    const capturedPipelines: unknown[][] = [];
+    const aggregate = jest.fn((pipeline: unknown[]) => {
+      capturedPipelines.push(pipeline);
+      return Promise.resolve([]);
+    });
+    const repository = new NewsBriefRepository({
+      aggregate,
+      countDocuments: jest.fn().mockResolvedValue(0),
+    } as never);
+
+    // 覆盖带筛选和不带筛选两种分页管道
+    await repository.list({
+      category: 'tech',
+      status: 'success',
+      period: 'daily',
+    });
+    await repository.list({});
+
+    expect(capturedPipelines).toHaveLength(2);
+    const allowed = new Set([
+      '$match',
+      '$sort',
+      '$skip',
+      '$limit',
+      '$project',
+      '$size',
+      '$ifNull',
+    ]);
+    const used = new Set(
+      capturedPipelines.flatMap((pipeline) => [...collectOperators(pipeline)]),
+    );
+    expect([...used].filter((operator) => !allowed.has(operator))).toEqual([]);
+    expect(
+      [...used].filter((operator) => FORBIDDEN.includes(operator)),
+    ).toEqual([]);
   });
 });
 

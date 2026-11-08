@@ -221,6 +221,25 @@ describe('DailyBriefService generateBrief', () => {
     expect(items).toHaveLength(2);
   });
 
+  it('pushes the per-source limit down to the history query', async () => {
+    // 不下推 limit 的话，回看窗口会把该来源窗口内的全部文档读进内存再丢掉
+    getHotList.mockResolvedValue({ success: true, items: buildItems('f', 1) });
+    getDataByTimeRange.mockResolvedValue(buildItems('history', 1));
+
+    await service.generateBrief({ sources: ['cls'], force: true });
+
+    expect(getDataByTimeRange).toHaveBeenCalledTimes(1);
+    const [source, , , limit] = getDataByTimeRange.mock.calls[0] as [
+      string,
+      number,
+      number,
+      number,
+    ];
+    expect(source).toBe('cls');
+    // config.topItemsPerSource = 2
+    expect(limit).toBe(2);
+  });
+
   it('logs why a configured source contributed no fresh items', async () => {
     // 被调度器禁用时简报只剩历史条目，不能静默退化。
     const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();

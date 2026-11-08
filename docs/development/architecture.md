@@ -18,11 +18,19 @@ Daily Hot API 是一个 NestJS 单体服务，按业务能力拆分模块。HTTP
   │
   ├─ /api/scheduler/* ───> SchedulerService ───> 热榜抓取 + 历史持久化
   │
-  └─ /api/briefs/* ──────> DailyBriefService
+  ├─ /api/briefs/* ──────> DailyBriefService
+  │                          ├─ 热榜与历史数据
+  │                          ├─ BriefSearchService ──> TavilySearchClient / DeepseekSearchClient
+  │                          ├─ AiAnalysisClient
+  │                          └─ DailyBriefRepository ──> MongoDB
+  │
+  └─ /api/news-briefs/* ─> NewsBriefService（含 digest / 分页列表 / DELETE）
                              ├─ 热榜与历史数据
-                             ├─ BriefSearchService ──> TavilySearchClient / DeepseekSearchClient
-                             ├─ AiAnalysisClient
-                             └─ DailyBriefRepository ──> MongoDB
+                             ├─ NewsBriefAiClient（通用新闻 prompt + 校验）
+                             ├─ NewsBriefSearchService（P1 搜索增强，复用 daily-brief 的
+                             │   TavilySearchClient / DeepseekSearchClient，二者由
+                             │   DailyBriefModule exports 导出）
+                             └─ NewsBriefRepository ──> MongoDB（分页聚合需保持 6.0 兼容）
 ```
 
 ## 核心模块
@@ -37,6 +45,7 @@ Daily Hot API 是一个 NestJS 单体服务，按业务能力拆分模块。HTTP
 | `HistoryModule` | `src/history` | 历史热点搜索、统计与范围查询 |
 | `SchedulerModule` | `src/scheduler` | 定时抓取、手动触发和来源配置 |
 | `DailyBriefModule` | `src/daily-brief` | 搜索增强、AI 分析、简报存储和调度 |
+| `NewsBriefModule` | `src/news-brief` | 多板块通用新闻简报、板块注册表、生成与调度、digest/分页/DELETE、P1 搜索增强（imports `DailyBriefModule` 复用搜索 client） |
 | `TokenModule` | `src/token` | 个别来源需要的签名和 Token 逻辑 |
 
 ## 热榜源发现
@@ -53,22 +62,24 @@ Daily Hot API 是一个 NestJS 单体服务，按业务能力拆分模块。HTTP
 
 ## 持久化模型
 
-MongoDB 当前包含三类业务文档：
+MongoDB 当前包含四类业务文档：
 
 - `HotItem`：历史热点，使用 `source + url` 识别同来源内容。
 - `SourceConfig`：来源启用状态、抓取间隔和最后抓取时间。
-- `DailyBrief`：简报状态、结构化分析、Markdown、原始输入和搜索证据。
+- `DailyBrief`：财经简报状态、结构化分析、Markdown、原始输入和搜索证据。
+- `NewsBrief`：通用新闻简报，按 `briefDate + period + category` 保存板块简报、条目、原始输入和调试字段。
 
 Schema 在 `src/database/schemas`，数据访问集中在 `src/database/repositories`。新 Schema 必须在 `DatabaseModule` 中通过 `MongooseModule.forFeature()` 注册，并导出对应 Repository。
 
-## 两类调度器
+## 三类调度器
 
-项目包含两个独立调度区域：
+项目包含三个独立调度区域：
 
 - `src/scheduler`：抓取热点并保存历史数据。
-- `src/daily-brief/daily-brief.scheduler.ts`：生成 AI 每日简报。
+- `src/daily-brief/daily-brief.scheduler.ts`：生成 AI 每日简报（财经分析）。
+- `src/news-brief/news-brief.scheduler.ts`：按板块生成通用新闻简报。
 
-二者都通过 `SchedulerRegistry` 动态管理 Cron。`ScheduleModule.forRoot()` 只应在应用中初始化一次，重构模块时需验证启动阶段仍能正确注册任务。
+三者都通过 `SchedulerRegistry` 动态管理 Cron。`ScheduleModule.forRoot()` 只应在应用中初始化一次，重构模块时需验证启动阶段仍能正确注册任务。
 
 ## 外部依赖降级
 

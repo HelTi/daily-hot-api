@@ -1,6 +1,6 @@
 # 定时任务
 
-项目有两套可独立控制的定时任务：热点抓取调度器和 AI 每日简报调度器。
+项目有三套可独立控制的定时任务：热点抓取调度器、AI 每日简报调度器和通用新闻简报调度器。
 
 ## 热点抓取调度器
 
@@ -93,10 +93,34 @@ curl -X POST http://localhost:6689/api/briefs/scheduler/reconfigure
 
 简报调度会调用外部热榜、配置的搜索平台和模型服务。开发环境建议保持 `BRIEF_ENABLED=false`，需要时使用手动生成接口。
 
+## 通用新闻简报调度器
+
+配置：
+
+```dotenv
+NEWS_BRIEF_ENABLED=false
+NEWS_BRIEF_CRON_EXPRESSION=30 8 * * *
+NEWS_BRIEF_TIMEZONE=Asia/Shanghai
+NEWS_BRIEF_CATEGORIES=finance,general,tech,sports
+```
+
+运行时控制：
+
+```bash
+curl http://localhost:6689/api/news-briefs/scheduler/status
+curl -X POST http://localhost:6689/api/news-briefs/scheduler/start
+curl -X POST http://localhost:6689/api/news-briefs/scheduler/stop
+curl -X POST http://localhost:6689/api/news-briefs/scheduler/reconfigure
+```
+
+新闻简报调度按 `NEWS_BRIEF_CATEGORIES` 的顺序逐个板块生成；默认 `NEWS_BRIEF_CATEGORY_CONCURRENCY=1` 串行执行，避免同时向模型发起多次付费请求。开发环境建议保持 `NEWS_BRIEF_ENABLED=false`。手动生成接口由 `NEWS_BRIEF_MANUAL_GENERATE_ENABLED` 单独控制，默认关闭并返回 403。
+
+与每日简报调度一样，`NEWS_BRIEF_ENABLED` 只决定进程启动时是否注册 Cron，运行期的启停可以通过上面的接口完成。
+
 ## 状态与持久性
 
 - API 启停只改变当前 Node.js 进程的运行状态。
-- 进程重启后会重新读取 `SCHEDULER_AUTO_START` 和 `BRIEF_ENABLED`。
+- 进程重启后会重新读取 `SCHEDULER_AUTO_START`、`BRIEF_ENABLED` 和 `NEWS_BRIEF_ENABLED`。
 - 修改 `.env` 后必须重启服务；仅调用 `reconfigure` 不会让 `ConfigService` 重新读取文件。
 - 多实例部署时，每个进程都会有自己的调度器。应只让一个实例启用自动任务，避免重复抓取和生成。
 - 维护期间可先停止任务，操作结束后再启动，并检查状态接口。

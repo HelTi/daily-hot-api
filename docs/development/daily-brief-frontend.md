@@ -340,6 +340,8 @@ Math.round(confidence * 100) + '%'
 
 可以每 10-15 秒轮询一次当前日期简报。
 
+重试一条 `failed` 简报时，服务端会在抢到生成占位的同时把它改回 `generating` 并清掉上一次的 `error`，所以轮询期间不会看到「正在重试却一直报 failed」。`force` 重新生成一条已有的 `success` 简报是例外：它在整个重生成过程中保持 `success` 并继续返回旧内容，失败也不会把旧内容覆盖掉。
+
 ### 失败
 
 如果 `status=failed`：

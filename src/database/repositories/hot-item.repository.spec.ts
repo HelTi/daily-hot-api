@@ -165,6 +165,33 @@ describe('HotItemRepository history queries', () => {
     });
   });
 
+  it('pushes an optional limit down to MongoDB and skips it when absent', async () => {
+    const lean = jest.fn().mockResolvedValue([]);
+    const limit = jest.fn();
+    const sort = jest.fn().mockReturnValue({ lean, limit });
+    const find = jest.fn().mockReturnValue({ sort });
+    const repository = new HotItemRepository({
+      find,
+    } as unknown as Model<HotItemDocument>);
+
+    await repository.getDataByTimeRange('demo', 1, 2, 5);
+    expect(find).toHaveBeenCalledWith({
+      source: 'demo',
+      timestamp: { $gte: 1, $lte: 2 },
+    });
+    expect(sort).toHaveBeenCalledWith({ timestamp: -1 });
+    expect(limit).toHaveBeenCalledWith(5);
+
+    limit.mockClear();
+    await repository.getDataByTimeRange('demo', 1, 2);
+    expect(limit).not.toHaveBeenCalled();
+
+    // 非法 limit 不应该变成 limit(0)（Mongo 里 0 = 不限制，等于悄悄失效）
+    await repository.getDataByTimeRange('demo', 1, 2, 0);
+    await repository.getDataByTimeRange('demo', 1, 2, Number.NaN);
+    expect(limit).not.toHaveBeenCalled();
+  });
+
   it('caches stats until a new item is written', async () => {
     const aggregate = jest
       .fn()

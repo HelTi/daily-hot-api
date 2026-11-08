@@ -16,9 +16,10 @@ REDIS_PORT=6379
 MONGODB_URI=mongodb://localhost:27017/daily-hot-api
 SCHEDULER_AUTO_START=false
 BRIEF_ENABLED=false
+NEWS_BRIEF_ENABLED=false
 ```
 
-开发环境建议关闭两个自动调度器，避免调试时批量抓取外部来源或意外调用付费的搜索与模型接口。
+开发环境建议关闭三个自动调度器，避免调试时批量抓取外部来源或意外调用付费的搜索与模型接口。
 
 ## 推荐的生产配置
 
@@ -31,14 +32,17 @@ MONGODB_URI=mongodb://mongodb:27017/daily-hot-api
 SCHEDULER_AUTO_START=true
 BRIEF_ENABLED=true
 BRIEF_TIMEZONE=Asia/Shanghai
+NEWS_BRIEF_ENABLED=false
 ```
+
+新闻简报默认关闭，确认板块、来源和模型费用符合预期后再改为 `NEWS_BRIEF_ENABLED=true`。手动生成接口另有 `NEWS_BRIEF_MANUAL_GENERATE_ENABLED` 开关，默认关闭。
 
 生产环境应另外配置真实的 `OPENAI_API_KEY` 和 `TAVILY_API_KEY`。不要把 `.env` 或密钥提交到 Git。
 
 ## 配置生效规则
 
 - 修改 `.env` 后需要重启服务。
-- `SCHEDULER_AUTO_START` 和 `BRIEF_ENABLED` 控制服务启动时是否自动注册任务。
+- `SCHEDULER_AUTO_START`、`BRIEF_ENABLED` 和 `NEWS_BRIEF_ENABLED` 控制服务启动时是否自动注册任务。
 - 通过 API 手动启停任务只影响当前进程；进程重启后会重新读取环境变量。
 - `ALLOWED_DOMAIN` 用于 CORS 的 `origin`，公开 API 可使用 `*`，限定前端时填写完整 Origin。
 - 被列入 `NOT_ALLOWED_REFRESH_SOURCE` 的来源会忽略客户端的 `noCache=true`。

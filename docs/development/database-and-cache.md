@@ -2,7 +2,7 @@
 
 ## MongoDB
 
-MongoDB 保存历史热点、来源调度配置和每日简报：
+MongoDB 保存历史热点、来源调度配置、AI 每日简报和通用新闻简报：
 
 ```dotenv
 MONGODB_URI=mongodb://localhost:27017/daily-hot-api
@@ -29,6 +29,9 @@ src/database/
 - `HotItem`：`source + url`、`source + timestamp`、`timestamp`、标题/描述全文索引。
 - `SourceConfig`：`source` 唯一索引。
 - `DailyBrief`：`briefDate + period` 唯一索引、`createdAt` 倒序索引。
+- `NewsBrief`：`briefDate + period + category` 唯一索引；另有按板块状态、日期排序的查询索引。
+
+`NewsBrief` 与 `DailyBrief` 使用同一套「原子 claim + `generationId` + 心跳 + 超时」写入模型。唯一索引保证同一日期、同一 `period`、同一板块只有一条记录，多实例部署时并发 claim 只有一个进程能成功。
 
 ::: info 去重说明
 热点存储使用 `{source, url}` 唯一索引与 `bulkWrite` 幂等写入。现有数据库必须先执行[唯一索引迁移](/operations/hot-item-index-migration)，再部署依赖该约束的写入逻辑。
@@ -106,6 +109,7 @@ docker compose exec mongodb mongosh daily-hot-api
 show collections
 db.hotitems.find().limit(5)
 db.dailybriefs.find().sort({ createdAt: -1 }).limit(1)
+db.newsbriefs.find().sort({ createdAt: -1 }).limit(1)
 ```
 
 数据备份与恢复见[数据卷与备份](/operations/volumes)。

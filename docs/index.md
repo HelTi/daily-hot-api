@@ -29,6 +29,11 @@ features:
     details: 使用可配置的 Tavily 或 DeepSeek 搜索补充证据，通过 OpenAI 兼容接口生成结构化产业与 A 股关联分析。
     link: /guide/daily-brief
     linkText: 生成简报
+  - icon: 📰
+    title: 通用新闻简报
+    details: 按财经、综合新闻、科技、体育板块生成统一结构的新闻简报，支持多板块聚合读取与历史分页查询，可选搜索增强（默认关闭）。与 AI 每日简报并列，不做产业链和股票关联。
+    link: /guide/news-brief
+    linkText: 查看新闻简报
   - icon: ⏱️
     title: 动态调度
     details: 在运行时启动、停止、触发和重新配置热点抓取及每日简报任务。

@@ -1,4 +1,7 @@
 import { z } from 'zod';
+// 板块 code 的唯一事实来源在 registry；registry 只依赖类型定义、不反向
+// 依赖 config，因此这里直接引用不会造成循环依赖。
+import { NEWS_CATEGORY_PROFILES } from '../news-brief/categories/news-category.registry';
 
 const envBoolean = (fallback: boolean) =>
   z.preprocess((value) => {
@@ -77,6 +80,90 @@ export const configValidationSchema = z.object({
     .max(50)
     .default(5),
   DEEPSEEK_SEARCH_TIMEOUT_MS: z.coerce.number().min(1000).default(10000),
+  // 通用新闻简报配置
+  NEWS_BRIEF_ENABLED: envBoolean(false),
+  NEWS_BRIEF_CRON_EXPRESSION: z.string().default('30 8 * * *'),
+  NEWS_BRIEF_TIMEZONE: z.string().default('Asia/Shanghai'),
+  NEWS_BRIEF_CATEGORIES: z
+    .string()
+    .default('finance,general,tech,sports')
+    .refine(
+      (value) => {
+        const codes = value
+          .split(',')
+          .map((code) => code.trim())
+          .filter(Boolean);
+        // 板块 code 必须唯一且都存在于代码内 registry；放在配置校验里
+        // 是为了在建立 Mongo/Redis 连接之前就干净地退出，而不是运行期才失败。
+        return (
+          codes.length > 0 &&
+          new Set(codes).size === codes.length &&
+          codes.every((code) =>
+            NEWS_CATEGORY_PROFILES.some((profile) => profile.code === code),
+          )
+        );
+      },
+      `NEWS_BRIEF_CATEGORIES must contain unique enabled category codes (${NEWS_CATEGORY_PROFILES.map((profile) => profile.code).join(', ')})`,
+    ),
+  NEWS_BRIEF_LOOKBACK_HOURS: z.coerce.number().min(1).default(24),
+  NEWS_BRIEF_TOP_ITEMS_PER_SOURCE: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(20)
+    .default(8),
+  // 上限与 news-brief-ai.client.ts 的 PROMPT_BUDGET 对齐：超出的条目进不了提示词
+  NEWS_BRIEF_MAX_CANDIDATES: z.coerce
+    .number()
+    .int()
+    .min(10)
+    .max(40)
+    .default(40),
+  NEWS_BRIEF_MAX_ITEMS_PER_CATEGORY: z.coerce
+    .number()
+    .int()
+    .min(3)
+    .max(10)
+    .default(8),
+  NEWS_BRIEF_SOURCE_CONCURRENCY: z.coerce.number().min(1).default(3),
+  NEWS_BRIEF_CATEGORY_CONCURRENCY: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(4)
+    .default(1),
+  NEWS_BRIEF_GENERATING_TIMEOUT_MINUTES: z.coerce.number().min(1).default(30),
+  // 产品要求前端不允许触发生成接口：默认关闭，仅运维临时开启
+  NEWS_BRIEF_MANUAL_GENERATE_ENABLED: envBoolean(false),
+  // P1 搜索增强：默认关闭（会产生额外搜索费用）
+  NEWS_BRIEF_SEARCH_ENABLED: envBoolean(false),
+  NEWS_BRIEF_SEARCH_MAX_QUERIES: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(8)
+    .default(6),
+  NEWS_BRIEF_SEARCH_CONCURRENCY: z.coerce.number().min(1).default(3),
+  // 产品要求：单条搜索词上限 2000 字
+  NEWS_BRIEF_SEARCH_QUERY_MAX_CHARS: z.coerce
+    .number()
+    .int()
+    .min(100)
+    .max(2000)
+    .default(2000),
+  NEWS_BRIEF_SEARCH_PROVIDERS: z
+    .string()
+    .default('tavily,deepseek')
+    .refine((value) => {
+      const names = value
+        .split(',')
+        .map((name) => name.trim())
+        .filter(Boolean);
+      return (
+        names.every((name) => name === 'tavily' || name === 'deepseek') &&
+        new Set(names).size === names.length
+      );
+    }, 'NEWS_BRIEF_SEARCH_PROVIDERS must contain unique tavily/deepseek names'),
 });
 
 export type ConfigType = z.infer<typeof configValidationSchema>;
