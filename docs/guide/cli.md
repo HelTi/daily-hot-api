@@ -276,13 +276,17 @@ CLI 管理的是自己启动的进程（通过状态目录里的 PID），不会
 
 ## 发布到 npm（维护者）
 
-当前已经以 `0.1.3` 发布。发布新版本前先更新版本号，并合并到 `main`：
+当前已经以 `0.1.5` 发布。发布新版本前先更新版本号，并合并到 `main`：
 
 ```bash
 npm version patch|minor|major --no-git-tag-version
 ```
 
-`0.1.3` 的变更：新增 `HOST` / `--host` 监听地址、`logs --clear` 与后台日志轮转，收紧 `stop` 的 PID 校验（只认状态文件记录的入口与包内 `bin`/`dist` 路径），`/health` 判定增加响应体形状校验，`restart` 在旧实例停止失败时中止。
+最近几个版本的变更：
+
+- `0.1.5`：每日简报的 AI 响应出现坏 JSON（例如 `highlights` 之后提前闭合根对象）时自动修复并重试，最多请求 3 次，避免当天简报因单次坏响应直接失败。
+- `0.1.4`：新增通用新闻简报（`/api/news-briefs`，财经/综合/科技/体育四个板块，独立 collection 与调度器）。
+- `0.1.3`：新增 `HOST` / `--host` 监听地址、`logs --clear` 与后台日志轮转，收紧 `stop` 的 PID 校验（只认状态文件记录的入口与包内 `bin`/`dist` 路径），`/health` 判定增加响应体形状校验，`restart` 在旧实例停止失败时中止。
 
 ### 推荐：Trusted Publishing（OIDC，不需要 token）
 
