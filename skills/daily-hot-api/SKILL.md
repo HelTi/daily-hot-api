@@ -5,10 +5,10 @@ license: MIT
 compatibility: Requires Node.js >= 22.20 and npx; npm registry and hot-list upstream sites must be reachable. First run downloads @ttkit/daily-hot-api (~1 MB) and starts a local service. Tested on Node 22.23.2 and 24.x; the CLI package itself declares >= 24.
 metadata:
   author: Helti
-  version: "1.1.0"
+  version: "1.1.1"
   homepage: https://helti.github.io/daily-hot-api/
   repository: https://github.com/HelTi/daily-hot-api
-  cli-version: "0.1.3"
+  cli-version: "0.1.5"
 ---
 
 # daily-hot-api

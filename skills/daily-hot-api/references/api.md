@@ -52,7 +52,7 @@
 - 第 2 步先读 `<skill home>/.started-by-skill` 里的 `baseUrl` 直接探 `/health`，命中就不再 spawn CLI；只有探测失败才回落到 `daily-hot-api status --json`。
 - 启动标记在 CLI 确认进程已起来之后、健康检查之前写入，保证健康检查失败的实例仍然可以被 `stop`。
 - `stop` 只在 CLI 返回 0 时删除标记；失败时保留标记并返回退出码 4。
-- 自动启动的实例写 `HOST=127.0.0.1`，只绑定回环地址（需要 CLI >= 0.1.3，`CLI_PIN` 已固定该版本）。
+- 自动启动的实例写 `HOST=127.0.0.1`，只绑定回环地址（需要 CLI >= 0.1.3，`CLI_PIN` 已固定 0.1.5）。
 - CLI 子进程在中立工作目录（`os.tmpdir()`）里执行，不继承当前 cwd。npx 发现 cwd 所在项目能提供同名 bin 时会无视 `@<version>`、直接跑那个命令，`CLI_PIN` 就被静默绕过；中立目录同时避免 CLI 读到用户 cwd 的 `.env`。
 
 ## 封装的服务端接口

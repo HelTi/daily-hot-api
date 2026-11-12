@@ -8,6 +8,8 @@ import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
+import { SKILL_VERSION } from '../../skills/daily-hot-api/scripts/daily-hot.mjs';
+
 import {
   compareVersions,
   neutralCwd,
@@ -458,7 +460,8 @@ test('--help 与 --version 可用', async () => {
   assert.equal(help.code, 0);
   assert.match(help.stdout, /daily-hot-api agent skill/);
   const version = await runScript(['--version']);
-  assert.match(version.stdout, /1\.1\.0/);
+  // 版本号以脚本内常量为准，避免每次发版都要改测试。
+  assert.ok(version.stdout.includes(SKILL_VERSION));
 });
 
 test('runCli 不继承当前 cwd，避免 npx 绕过 CLI_PIN', async () => {

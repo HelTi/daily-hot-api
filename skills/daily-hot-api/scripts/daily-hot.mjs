@@ -27,7 +27,7 @@ import {
   stopSkillService,
 } from './lib/service.mjs';
 
-const SKILL_VERSION = '1.1.0';
+const SKILL_VERSION = '1.1.1';
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 100;
 const MAX_DESC_CHARS = 160;

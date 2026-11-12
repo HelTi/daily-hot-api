@@ -19,7 +19,7 @@ import {
 } from './errors.mjs';
 
 export const CLI_PKG = '@ttkit/daily-hot-api';
-export const CLI_PIN = '0.1.3';
+export const CLI_PIN = '0.1.5';
 export const MIN_NODE_VERSION = '22.20.0';
 
 const IS_WINDOWS = process.platform === 'win32';
@@ -31,7 +31,7 @@ const DEFAULT_TIMEOUT_MS = 120_000;
  * 不能继承当前 cwd：npx 看到 cwd 所在项目能提供同名 bin 时（package.json
  * 声明了 `daily-hot-api`，或存在 node_modules/.bin/daily-hot-api），会直接
  * 跑那个命令而无视 `@<version>`，CLI_PIN 就被静默绕过——实测在
- * daily-hot-api 仓库里 `npx --yes @ttkit/daily-hot-api@0.1.3 --version`
+ * daily-hot-api 仓库里 `npx --yes @ttkit/daily-hot-api@0.1.5 --version`
  * 会输出全局的 0.1.2。中立目录同时避免 CLI 读到用户 cwd 的 .env。
  */
 function neutralCwd() {
