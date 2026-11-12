@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import OpenAI from 'openai';
 import { z } from 'zod';
 import {
@@ -70,16 +70,31 @@ const briefAnalysisSchema = z
   })
   .strip();
 
+export interface AnalyzeDailyBriefInput {
+  briefDate: string;
+  sources: string[];
+  items: BriefInputItem[];
+  searchEvidence: BriefSearchEvidence[];
+}
+
+/**
+ * 内容层的最大请求次数（含首次请求）。
+ *
+ * `AI_MAX_RETRIES` 只覆盖 SDK 的 HTTP 层重试；实测 DeepSeek 在简报这种大结构化
+ * 输出下会偶发返回坏 JSON（例如在 highlights 之后提前闭合根对象），这属于内容层
+ * 失败，SDK 不会重试。这里重新请求一次的成本远低于当天简报直接失败。
+ */
+export const ANALYSIS_PARSE_ATTEMPTS = 3;
+
 @Injectable()
 export class AiAnalysisClient {
+  private readonly logger = new Logger(AiAnalysisClient.name);
+
   constructor(private readonly config: DailyBriefConfigService) {}
 
-  async analyzeDailyBrief(input: {
-    briefDate: string;
-    sources: string[];
-    items: BriefInputItem[];
-    searchEvidence: BriefSearchEvidence[];
-  }): Promise<BriefAnalysis> {
+  async analyzeDailyBrief(
+    input: AnalyzeDailyBriefInput,
+  ): Promise<BriefAnalysis> {
     const apiKey = this.config.openaiApiKey;
     if (!apiKey) {
       throw new Error('OPENAI_API_KEY is not configured');
@@ -97,6 +112,38 @@ export class AiAnalysisClient {
       maxRetries: this.config.aiMaxRetries,
     });
 
+    let lastError: Error | undefined;
+    for (let attempt = 1; attempt <= ANALYSIS_PARSE_ATTEMPTS; attempt++) {
+      const content = await this.requestAnalysis(
+        client,
+        model,
+        isDeepseek,
+        input,
+      );
+      if (!content) {
+        lastError = new Error('AI returned empty content');
+      } else {
+        try {
+          return this.parseAnalysis(content);
+        } catch (error) {
+          lastError = error instanceof Error ? error : new Error(String(error));
+        }
+      }
+
+      this.logger.warn(
+        `Daily brief AI response rejected (attempt ${attempt}/${ANALYSIS_PARSE_ATTEMPTS}): ${lastError.message}`,
+      );
+    }
+
+    throw lastError ?? new Error('AI analysis failed before returning content');
+  }
+
+  private async requestAnalysis(
+    client: OpenAI,
+    model: string,
+    isDeepseek: boolean,
+    input: AnalyzeDailyBriefInput,
+  ): Promise<string | undefined> {
     const completion = await client.chat.completions.create({
       model,
       temperature: 0.2,
@@ -149,12 +196,7 @@ export class AiAnalysisClient {
       ],
     });
 
-    const content = completion.choices[0]?.message?.content;
-    if (!content) {
-      throw new Error('AI returned empty content');
-    }
-
-    return this.parseAnalysis(content);
+    return completion.choices[0]?.message?.content ?? undefined;
   }
 
   getModel(): string {
@@ -206,16 +248,7 @@ export class AiAnalysisClient {
   }
 
   private parseAnalysis(content: string): BriefAnalysis {
-    let parsedContent: unknown;
-    try {
-      parsedContent = JSON.parse(content);
-    } catch (error) {
-      throw new Error(
-        `AI returned invalid JSON: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
-    }
+    const parsedContent = this.parseJsonContent(content);
 
     const result = briefAnalysisSchema.safeParse(parsedContent);
     if (!result.success) {
@@ -235,5 +268,111 @@ export class AiAnalysisClient {
     }
 
     return analysis;
+  }
+
+  /**
+   * 解析模型返回的 JSON，并容忍几类常见的格式坏掉：
+   * 1. 直接解析原文（原文是合法 JSON 时走这里）；
+   * 2. 去掉 Markdown 代码围栏后再解析；
+   * 3. 修复“提前闭合根对象”的坏 JSON；
+   * 4. 从前后混有说明文字的内容里截取第一个完整 JSON 值。
+   *
+   * 任何一种候选文本能 JSON.parse 就采用。全部失败时抛出 `AI returned invalid
+   * JSON`，由 `analyzeDailyBrief` 决定是否重新请求模型。
+   */
+  private parseJsonContent(content: string): unknown {
+    const base = this.stripCodeFence(content).trim();
+    const candidates = [
+      base,
+      this.repairPrematureRootClose(base),
+      this.extractFirstJsonValue(base),
+    ];
+
+    let lastError: Error | undefined;
+    for (const candidate of candidates) {
+      if (!candidate) continue;
+      try {
+        return JSON.parse(candidate);
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+      }
+    }
+
+    throw new Error(
+      `AI returned invalid JSON: ${lastError?.message ?? 'empty response'}`,
+    );
+  }
+
+  /** 模型偶尔会返回 ```json ... ``` 围栏，去掉后再解析。 */
+  private stripCodeFence(content: string): string {
+    const trimmed = content.trim();
+    const fenced = /^```[a-zA-Z]*\s*\n?([\s\S]*?)\n?```\s*$/.exec(trimmed);
+    return fenced ? fenced[1].trim() : trimmed;
+  }
+
+  /**
+   * 修复模型偶发的“提前闭合根对象”：`{"summary":..,"highlights":[..]},"topics":[..]}`。
+   *
+   * 只在多余闭合符后面紧跟 `,"key"`（明显是继续写对象成员）时才删除，
+   * 避免把“完整 JSON + 后续说明文字”误当成可修复结构。
+   */
+  private repairPrematureRootClose(content: string): string | null {
+    const rootCloseIndex = this.findRootCloseIndex(content);
+    if (rootCloseIndex < 0) return null;
+
+    const rest = content.slice(rootCloseIndex + 1).trimStart();
+    if (!/^,\s*"/.test(rest)) return null;
+
+    return content.slice(0, rootCloseIndex) + content.slice(rootCloseIndex + 1);
+  }
+
+  /**
+   * 返回从 `start` 开始扫描时第一个让括号深度归零的下标；字符串内的括号不计入。
+   * 内容不完整（括号未闭合）时返回 -1。
+   */
+  private findRootCloseIndex(content: string, start = 0): number {
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+
+    for (let index = start; index < content.length; index++) {
+      const char = content[index];
+
+      if (inString) {
+        if (escaped) {
+          escaped = false;
+        } else if (char === '\\') {
+          escaped = true;
+        } else if (char === '"') {
+          inString = false;
+        }
+        continue;
+      }
+
+      if (char === '"') {
+        inString = true;
+        continue;
+      }
+
+      if (char === '{' || char === '[') {
+        depth++;
+      } else if (char === '}' || char === ']') {
+        depth--;
+        if (depth === 0) return index;
+      }
+    }
+
+    return -1;
+  }
+
+  /** 截取第一个完整的 JSON 值（对象或数组），允许前后有说明文字。 */
+  private extractFirstJsonValue(content: string): string | null {
+    const start = content.search(/[{[]/);
+    if (start < 0) return null;
+
+    const end = this.findRootCloseIndex(content, start);
+    if (end < 0) return null;
+
+    return content.slice(start, end + 1);
   }
 }

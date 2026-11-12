@@ -147,7 +147,7 @@ DEEPSEEK_SEARCH_TIMEOUT_MS=10000
 
 `briefDate + period` 有唯一索引，用于避免同一天同一类型简报重复写入。
 
-生成时使用原子 claim 和 `generationId` 防止并发任务互相覆盖，心跳用于识别失联任务。超过 `BRIEF_GENERATING_TIMEOUT_MINUTES` 后，旧任务的结果也不能覆盖新任务。重试一条 `failed` 简报时，claim 成功的同时会把状态复位成 `generating` 并清掉上一次的 `error`，避免重试期间接口一直返回失败。强制重新生成已有成功简报时，整个过程保持 `success` 并继续返回旧内容，失败也会保留先前的成功内容。普通响应隐藏原始输入、搜索证据和生成状态字段；调试时可以使用 `includeDebug=true`。
+生成时使用原子 claim 和 `generationId` 防止并发任务互相覆盖，心跳用于识别失联任务。AI 响应会先按原文解析；失败时依次尝试去掉 Markdown 围栏、修复“提前闭合根对象”的坏 JSON、截取首个完整 JSON 值，仍无法解析或校验不通过（空内容、无 summary、无 topics）时会重新请求模型，最多请求 3 次，全部失败才把本次生成标记为 `failed`。该内容层重试与 `AI_MAX_RETRIES` 的 HTTP 层重试相互独立。超过 `BRIEF_GENERATING_TIMEOUT_MINUTES` 后，旧任务的结果也不能覆盖新任务。重试一条 `failed` 简报时，claim 成功的同时会把状态复位成 `generating` 并清掉上一次的 `error`，避免重试期间接口一直返回失败。强制重新生成已有成功简报时，整个过程保持 `success` 并继续返回旧内容，失败也会保留先前的成功内容。普通响应隐藏原始输入、搜索证据和生成状态字段；调试时可以使用 `includeDebug=true`。
 
 `analysis` 里包含：
 
